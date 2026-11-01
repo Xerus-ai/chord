@@ -1,5 +1,14 @@
 {
-  "placeholder_passwords": ["password", "pass", "pw", "secret", "changeme", "postgres", "pglite"],
+  "placeholder_passwords": [
+    "password",
+    "pass",
+    "pw",
+    "secret",
+    "changeme",
+    "postgres",
+    "pglite",
+    "redacted"
+  ],
   "personal_email_domains": [
     "gmail.com",
     "googlemail.com",
