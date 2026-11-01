@@ -14,9 +14,9 @@ secretGroup = 1
 keywords = ["postgres", "mysql", "mongodb", "redis", "amqp"]
 
 [[rules.allowlists]]
-description = "Placeholder passwords, as in scripts/leak-guard/config.json"
+description = "Placeholder passwords, as in scripts/leak-guard/config.json (REDACTED is the marker gitleaks --redact writes)"
 regexTarget = "secret"
 regexes = [
-  '''(?i)^(?:password|pass|pw|secret|changeme|postgres|pglite)$''',
+  '''(?i)^(?:password|pass|pw|secret|changeme|postgres|pglite|redacted)$''',
   '''^(?:<.*>|\$\{.*\}|\{.*\}|\*+|[xX]+)$''',
 ]

@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,8 +87,9 @@ describe('scan.py tree', () => {
         {
           files: {
             'a.ts': `const url = '${PLACEHOLDER_CONN}';\n`,
-            // Placeholder shapes: <...>, ${...}, {...}, stars and x's are not passwords.
-            'shapes.ts': ['<password>', '${DB_PASSWORD}', '{password}', '****', 'xxxx']
+            // Placeholder shapes: <...>, ${...}, {...}, stars and x's are not passwords, and
+            // neither is REDACTED, the marker gitleaks --redact writes into its own reports.
+            'shapes.ts': ['<password>', '${DB_PASSWORD}', '{password}', '****', 'xxxx', 'REDACTED']
               .map(
                 (pw) =>
                   `const url = '${['postgres', '://app:', pw, '@localhost/chord'].join('')}';\n`
@@ -249,6 +250,19 @@ describe('public_rules.committer_emails', () => {
 
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/git log .* failed/);
+  });
+});
+
+describe('.gitleaks.toml', () => {
+  it("lets through exactly config.json's placeholder passwords in the connection-string rule", () => {
+    const toml = readFileSync(join(ROOT, '.gitleaks.toml'), 'utf8');
+    const allowlist = /'''\(\?i\)\^\(\?:([^)]*)\)\$'''/.exec(toml);
+    if (!allowlist) throw new Error('.gitleaks.toml has no (?i)^(?:...)$ placeholder allowlist');
+    const config = JSON.parse(readFileSync(join(HERE, 'config.json'), 'utf8')) as {
+      placeholder_passwords: string[];
+    };
+
+    expect(allowlist[1].split('|').sort()).toEqual([...config.placeholder_passwords].sort());
   });
 });
 
