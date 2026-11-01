@@ -1,0 +1,13 @@
+packages:
+  - '.'
+  - 'server'
+  - 'packages/*'
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - core-js
+  - electron
+  - esbuild
+  - node-pty
+  - protobufjs
+  - sqlite3

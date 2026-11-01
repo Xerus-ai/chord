@@ -1,0 +1,48 @@
+import type { TelemetryEnvelope } from '@shared/telemetry';
+
+type TelemetryScope = Pick<
+  TelemetryEnvelope,
+  'project_id' | 'work_item_id' | 'task_id' | 'conversation_id'
+>;
+
+const scope: TelemetryScope = {
+  project_id: undefined,
+  work_item_id: undefined,
+  task_id: undefined,
+  conversation_id: undefined,
+};
+
+export function setTelemetryTaskScope({
+  projectId,
+  taskId,
+}: {
+  projectId: string;
+  taskId: string;
+}): void {
+  scope.project_id = projectId;
+  scope.task_id = taskId;
+  scope.conversation_id = undefined;
+}
+
+export function clearTelemetryTaskScope(): void {
+  scope.project_id = undefined;
+  scope.work_item_id = undefined;
+  scope.task_id = undefined;
+  scope.conversation_id = undefined;
+}
+
+export function setTelemetryWorkItemScope(workItemId: string): void {
+  scope.work_item_id = workItemId;
+}
+
+export function clearTelemetryWorkItemScope(): void {
+  scope.work_item_id = undefined;
+}
+
+export function setTelemetryConversationScope(conversationId: string | null): void {
+  scope.conversation_id = conversationId ?? undefined;
+}
+
+export function getTelemetryScope(): TelemetryScope {
+  return { ...scope };
+}

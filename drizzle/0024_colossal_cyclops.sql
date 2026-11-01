@@ -1,0 +1,1 @@
+ALTER TABLE `sync_queue` ADD `first_orphaned_at` integer;

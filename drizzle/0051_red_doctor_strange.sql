@@ -1,0 +1,1 @@
+ALTER TABLE `work_item_tickets` ADD `ticket_title` text;

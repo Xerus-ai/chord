@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["react", "react-dom", "electron-vite/node", "node"],
+    "paths": {
+      "@renderer/*": ["./src/renderer/*"],
+      "@main/*": ["./src/main/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@root/*": ["./*"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "src/main/**/*",
+    "src/artifact-runtime/**/*",
+    "src/chord-mcp-shim/**/*",
+    "src/renderer/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "src/types/**/*",
+    "src/test/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "out", "**/_*/**"]
+}

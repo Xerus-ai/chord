@@ -1,0 +1,3 @@
+provider: generic
+url: https://releases.xerus.ai
+channel: v1-stable

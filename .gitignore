@@ -1,0 +1,114 @@
+# Dependencies
+node_modules/
+dist/
+out/
+/release/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI assistant instructions. .claude/settings.json (the hook harness), skills,
+# commands, agents, hooks and obs scripts are tracked; per-machine settings are not.
+.notes/
+.notes
+.claude/settings.local.json
+
+# obs: one DB per project plus run logs (written by hooks and gate.ps1)
+.claude/obs/*.db
+.claude/obs/*.db-*
+.claude/obs/*.log
+.claude/obs/gate-logs/
+.claude/obs/transcript-archive/
+.claude/obs/context-flags/
+.claude/obs/__pycache__/
+
+# proof media (gate.ps1 complete copies the run record + review + media here; the
+# record and review are tracked, screenshots and videos are not)
+.command-center/proofs/**/*.png
+.command-center/proofs/**/*.webm
+
+# Checkouts directory
+.checkouts/
+
+/container.md
+
+.env
+.cursor
+.codex/config.toml
+
+src/main/appConfig.json
+
+# Built e2e apps: `.e2e-app` and the named ones (`node scripts/e2e/build-e2e-app.mjs .e2e-app-history`).
+.e2e-app*/
+
+# e2e run records and their user-perspective reviews (scripts/e2e/experience/run-record.mjs)
+.e2e-runs/
+
+# Screenshots from every run: e2e suites (screenshots/e2e), design-parity
+# scripts, the smoke script and failing vitest browser tests. Regenerated on
+# each run.
+/screenshots/
+
+# Vitest browser run attachments
+.vitest-attachments/
+
+# Cygwin/Git Bash crash dumps, anywhere in the tree
+bash.exe.stackdump
+
+# Hocuspocus runtime document state (written by the sync server on every edit)
+server/data/
+
+# satellite-doctor run artifact (health input for runners; regenerated every run)
+.command-center/.doctor-status.json
+
+# per-repo gate state (written only by gate.ps1; never shared, never committed)
+.claude/state/

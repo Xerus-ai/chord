@@ -1,0 +1,117 @@
+# Linux runs the full gate (lint, typecheck, test); Windows only proves the
+# app still builds there (electron-vite, no packaging), since a Windows
+# runner is slower and costs more minutes.
+# Every job names its runner image (devstation-0ttv): ubuntu-latest moved to 26.04, where the
+# locked Playwright cannot install chromium. Move an image here, with what it needs, in a PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `scripts/postinstall.ts` skips the Electron rebuild under CI, so the native
+  # modules keep the Node prebuilds pnpm installs — the ABI vitest runs under.
+  CI: '1'
+
+jobs:
+  linux:
+    name: lint, typecheck, test (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Git identity for suites that commit in temporary repositories
+        run: |
+          git config --global user.name "chord-ci"
+          git config --global user.email "ci@chord.invalid"
+      - name: Chromium for the vitest browser project
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run lint
+        env:
+          # eslint's typed linting passes at 2 GB and runs out at 1.5 GB; Node's default old
+          # space on the runner is about 2 GB, so on the default the step flips.
+          NODE_OPTIONS: --max-old-space-size=4096
+      - run: pnpm run typecheck
+      - name: Test
+        # Every vitest project except `node-codex`: those suites drive the
+        # installed, logged-in `codex app-server`, which CI does not have.
+        run: |
+          pnpm run build:protocol
+          pnpm exec vitest run \
+            --project node \
+            --project node-lane-runs \
+            --project node-solo \
+            --project server \
+            --project browser
+      - name: Failing browser-test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-screenshots
+          path: screenshots/vitest
+          if-no-files-found: ignore
+
+  windows-build:
+    name: build (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+        env:
+          # The renderer bundle passes Node's 2 GB default heap on the runner.
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  # The leak guard's public rules (scripts/leak-guard) and gitleaks (devstation-y74s.1): the
+  # tree on every run, and on a PR the commits it adds (base..head) with their messages. A
+  # push to main is a merged PR whose commits were scanned on the PR, so it scans the tree
+  # only; history before the PR's base is never scanned (a finding there is fixed by
+  # rewriting history, not by a later commit).
+  leak-scan:
+    name: leak scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The range's commits and every committer's address (the email rule).
+          fetch-depth: 0
+      - name: Install gitleaks (pinned, checksum checked)
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: The tree
+        run: |
+          python3 scripts/leak-guard/scan.py tree
+          "$RUNNER_TEMP/gitleaks" dir . --no-banner --redact
+      - name: The commits of this PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/leak-guard/scan.py range "$BASE" "$HEAD"
+          "$RUNNER_TEMP/gitleaks" git . --no-banner --redact --log-opts="$BASE..$HEAD"

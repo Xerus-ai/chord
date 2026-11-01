@@ -1,0 +1,1 @@
+ALTER TABLE `work_items` ADD `effort` text DEFAULT 'high';

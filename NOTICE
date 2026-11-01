@@ -1,0 +1,22 @@
+Chord
+Copyright (c) 2026 Xerus.
+
+This product includes software derived from emdash
+(https://github.com/generalaction/emdash),
+Copyright 2026 General Action, Inc.,
+licensed under the Apache License, Version 2.0 (LICENSES/Apache-2.0.txt).
+Xerus has modified those files.
+
+This product bundles the following fonts, each licensed under the SIL Open
+Font License, Version 1.1:
+
+  Geist (src/renderer/assets/fonts/Geist-Variable.woff2)
+  Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
+  LICENSES/OFL-1.1-Geist.txt
+
+  Commit Mono (src/renderer/assets/fonts/CommitMono-Variable.woff2)
+  Copyright (c) 2023 Eigil Nikolajsen
+  LICENSES/OFL-1.1-CommitMono.txt
+
+Third-party npm packages shipped with the app carry their own license files
+inside node_modules.

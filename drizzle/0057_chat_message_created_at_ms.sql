@@ -1,0 +1,1 @@
+ALTER TABLE `chat_messages` ADD `created_at_ms` integer;

@@ -1,0 +1,1566 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@xterm/xterm/css/xterm.css';
+@import 'allotment/dist/style.css';
+/* The design tokens. New tokens land there, not here; this file is
+   already well past the repo's 400-line limit. */
+@import './styles/tokens.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark-black (&:where(.dark-black, .dark-black *));
+@custom-variant chord-dark (&:where(.chord-dark, .chord-dark *));
+@custom-variant chord-light (&:where(.chord-light, .chord-light *));
+
+@font-face {
+  font-family: 'Geist';
+  src: url('./assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: block;
+  font-optical-sizing: auto;
+}
+
+@font-face {
+  font-family: 'Commit Mono';
+  src: url('./assets/fonts/CommitMono-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: block;
+}
+
+@theme inline {
+  /* The platform's own UI face (Segoe UI on Windows, SF on macOS), so the
+     app reads as native chrome. */
+  --font-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* App tier — chrome, chat, panels. `body` is the document default (see
+     @layer base), so anything without an explicit size lands here, not on the
+     browser's 16px, which is larger than every step below except display. */
+  --text-display: 22px;
+  --text-display--line-height: 1.2;
+  --text-title: 16px;
+  --text-title--line-height: 1.5;
+  /* 14px/22px — the prototype's reading size. 13px/1.5 was set for the old
+     typeface; Geist runs optically smaller, so the same number read smaller
+     again on screen. */
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+  --text-tiny: 12px;
+  --text-tiny--line-height: 1.5;
+  /* Raised 10px -> 12px. The ramp stops at 12; anything
+     below it is off the scale, and 10px metadata in the sidebar was the most
+     visible case. That makes micro and tiny the same size on purpose — micro
+     survives as the name for the densest metadata rather than as a step, so
+     its ~100 call sites did not each need editing. Its tighter line-height is
+     what still distinguishes it.
+
+     The 12px floor governs THIS ramp — chrome, chat, panels, forms: text that
+     is read. It is not app-wide. The scanned-list tier in styles/tokens.css
+     (`--text-list-meta` 11px, `--text-list-badge` 10px) sits below it on
+     purpose, for rows that are scanned rather than read, and is a sanctioned
+     exception rather than a second copy of this scale that drifted. Two ramps,
+     one boundary: if a surface is a list of rows it may use the list tier; if
+     it is anything else it lands here. Do not resolve the disagreement by
+     raising the list tier — that restyles the shipped sidebar and rail. */
+  --text-micro: 12px;
+  --text-micro--line-height: 1.3;
+  --text-code: 13px;
+  --text-code--line-height: 1.2;
+
+  /* Document tier — long-form artifact prose only (`.artifact-editor-content`).
+     Deliberately larger than the app tier: a document is read, not scanned.
+     Dense elements inside a document (tables, code) stay on the app tier. */
+  --text-doc-body: 15px;
+  --text-doc-body--line-height: 1.7;
+  --text-doc-h1: 28px;
+  --text-doc-h1--line-height: 1.2;
+  --text-doc-h2: 22px;
+  --text-doc-h2--line-height: 1.3;
+  --text-doc-h3: 18px;
+  --text-doc-h3--line-height: 1.4;
+
+  /* Avatar initials — optically sized to the circle they sit in, so these are
+     keyed to avatar diameter rather than being a reading size. */
+  --text-avatar-sm: 7px;
+  --text-avatar-sm--line-height: 1;
+  --text-avatar-md: 8px;
+  --text-avatar-md--line-height: 1;
+  --text-avatar-lg: 9px;
+  --text-avatar-lg--line-height: 1;
+
+  --tracking-display: -0.025em;
+  --tracking-title: -0.015em;
+  /* No tracking on interface text; the negative value was Geist's. */
+  --tracking-body: 0em;
+  --tracking-tiny: 0em;
+  --tracking-micro: 0.01em;
+
+  /* ── Colour: the Tailwind mirror ────────────────────────────────────────
+     One entry per token that is reached for as a UTILITY (`bg-surface-inset`,
+     `text-text-muted`). Tokens consumed only through `var()` or `cssVar()` —
+     the identity tables, the monaco/xterm sets — are deliberately NOT mirrored:
+     an unused mirror is a Tailwind utility nobody writes, and it is checked by
+     `scripts/token-audit.mjs`.
+
+     Names match the token exactly, which is why the foreground utilities read
+     `text-text-muted`. The alternative is a second vocabulary for the same
+     colour, and that is the thing this migration removed. */
+
+  /* Surfaces — canvas < surface < raised < inset, plus the two opaque
+     interaction steps. Hover and active are translucent overlays that work on
+     any of them (see the theme blocks). */
+  --color-surface-canvas: var(--surface-canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-hover-solid: var(--surface-hover-solid);
+  --color-surface-active-solid: var(--surface-active-solid);
+
+  /* Text */
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-passive: var(--text-passive);
+
+  /* Borders */
+  --color-border-subtle: var(--border-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  /* Action tier — Rule 1: a QUIETLY lifted surface carrying near-white text.
+     It is not the loudest thing on screen; the selection is. */
+  --color-action-bg: var(--action-bg);
+  --color-action-bg-hover: var(--action-bg-hover);
+  --color-action-fg: var(--action-fg);
+
+  /* Disabled is a STATE WITH ITS OWN VALUES, not a transparency.
+     `opacity:.5` fades a control's content as well as its surface, so
+     overlapping icon strokes render unevenly and a disabled label stops
+     being a predictable colour. A filled control takes the -bg/-fg pair; a
+     ghost or icon button stays transparent and drops only `--text-disabled`. */
+  --color-action-bg-disabled: var(--action-bg-disabled);
+  --color-action-fg-disabled: var(--action-fg-disabled);
+  --color-text-disabled: var(--text-disabled);
+
+  /* Three more, because a checkbox, a radio and a switch do not carry their
+     disabled state in text. Unchecked, their whole presentation is a BORDER on
+     a transparent box — Base UI does not even mount the indicator, so there is
+     no element consuming `color` and a text token would render nothing at all.
+     Checked, the state IS the fill. Hence a border step and a dimmed selected
+     pair. See the plan's "Disabled is a state, not a transparency". */
+  --color-border-disabled: var(--border-disabled);
+  --color-selected-border-disabled: var(--selected-border-disabled);
+  --color-selected-fg-disabled: var(--selected-fg-disabled);
+
+  /* Selection and focus — Rule 1: the brightest chrome in the app. One
+     contract for every selected thing: a bright outline over a faint wash.
+     `--selected-fg` is the glyph on a control that is filled with the outline
+     colour (a checked checkbox, a switch knob). */
+  --color-selected-border: var(--selected-border);
+  --color-selected-bg: var(--selected-bg);
+  /* A row a notification scrolled to (shared-items step 5): lit for 2 s, then
+     fading out. A touch stronger than --surface-active so it reads at a glance. */
+  --color-reveal-bg: var(--reveal-bg);
+  /* The lane the centre is focused on, inside the active work item's card.
+     The card already wears --selected-bg, so a hover-strength wash on top
+     vanished (devstation-qm7): this one is about twice the card's. */
+  --color-lane-focused-bg: var(--lane-focused-bg);
+  --color-selected-fg: var(--selected-fg);
+  --color-focus-ring: var(--focus-ring);
+
+  /* Scrim — always darker than the app in both themes, so a dialog reads as
+     "in front of" rather than "instead of". */
+  --color-scrim: var(--scrim);
+
+  /* ── Signal: the only hue in the app (Rule 2) ──────────────────────────
+     Surfaces, text, borders, hover, cards, buttons, selection and focus are
+     achromatic in both themes. Hue is permitted ONLY here and in the identity
+     tables (styles/tokens.css). A token outside those three families that
+     carries a hue is a bug, and `scripts/token-audit.mjs` fails the build. */
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-active: var(--status-ok-active);
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-err: var(--status-err);
+  --color-status-err-bg: var(--status-err-bg);
+  --color-status-err-bg-strong: var(--status-err-bg-strong);
+  --color-status-err-border: var(--status-err-border);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-running: var(--status-running);
+  --color-status-merged: var(--status-merged);
+  --color-status-idle: var(--status-idle);
+
+  --color-diff-add: var(--diff-add);
+  --color-diff-del: var(--diff-del);
+
+  /* The radius ramp steps down from --radius (10px) by 2px: lg 10, md 8,
+     sm 6, xs 4. `xs` was added after the fact — 46 call sites had written
+     `rounded-[4px]` by hand, across the sidebar, the rail, work-list and
+     participant-view. A step that many places reach for independently is a
+     real step in the scale, not an accident, so it gets a name rather than
+     being rounded up to `sm`. Use these; an arbitrary `rounded-[Npx]` is how
+     a fifth unnamed step gets born. */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xs: calc(var(--radius) - 6px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--accordion-panel-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--accordion-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+::selection {
+  background: var(--selection-bg);
+}
+
+/* Frameless window shell. A header rail drags the window;
+   anything interactive inside it must not, or it swallows clicks. */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+.app-drag-region
+  :is(button, input, textarea, select, a, [role='button'], [role='tab'], [role='menu']) {
+  -webkit-app-region: no-drag;
+}
+
+/* Clears the OS window controls painted over the top-right corner on
+   Windows/Linux (Window Controls Overlay). Outside an overlay the env values
+   are absent and this resolves to the base inset. */
+.pr-window-controls {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 8px);
+}
+
+/* Horizontal tab strip scrolls by wheel and the ‹ › buttons, never a scrollbar */
+.tab-strip-scroll {
+  scrollbar-width: none;
+}
+.tab-strip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide xterm viewport scrollbars in embedded terminals */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 0 !important; /* Chrome/Safari */
+  height: 0 !important;
+}
+
+@layer base {
+  /* ===== The colour scale =====================================================
+
+     Achromatic chrome, narrow signal. Two rules, both checkable by a reviewer
+     in one pass and by `scripts/token-audit.mjs` in CI
+     (the color token system design):
+
+       Rule 1 — Lifted fill is action, bright outline is selection.
+         `--action-bg` / `--action-fg` is a QUIETLY lifted surface carrying
+         near-white text. `--selected-border` (+ `--selected-bg` wash) is the
+         brightest chrome on screen. Selection outranks action. Neither
+         reaches pure white.
+
+       Rule 2 — Hue is banned from chrome.
+         Surfaces, text, borders, hover, cards, buttons, selection and focus
+         are achromatic in both themes. Hue is permitted only in `--status-*`,
+         `--diff-*` and the `--identity-*` tables. A token not on that list may
+         not carry a hue.
+
+     Interaction is an OVERLAY, never a surface step: one `--surface-hover`
+     works on all four surfaces, so a hovered sidebar row and a hovered row
+     inside a card lift by the same amount. The `-solid` pair exists only for
+     controls that need an opaque chip of their own. */
+
+  /* -- DARK ------------------------------------------------------------------
+     Every value here is SAMPLED from the reference screenshot, not chosen. The
+     ground is #29282b — a mid-dark grey, 82% of the reference's pixels — and
+     it carries a faint violet cast (R41 G40 B43). That 3-point cast is kept:
+     it is what stops the grey reading as cold, and it is small enough that no
+     surface looks tinted. The previous scale was a teal-tinted near-black
+     (#181b1a); this is roughly four times lighter, and it is the reference. */
+  .chord-dark {
+    color-scheme: dark;
+
+    --surface-canvas: #252428;
+    --surface: #29282b; /* <- the reference background */
+    --surface-raised: #2c2c2e; /* <- sampled: unselected chip */
+    --surface-inset: #323135; /* inputs, wells, cards */
+
+    --surface-hover: rgba(255, 255, 255, 0.045);
+    --surface-active: rgba(255, 255, 255, 0.08);
+    --surface-hover-solid: #2f2e31; /* <- sampled: the quiet "Go back" pill */
+    --surface-active-solid: #363539;
+
+    --text: #f2f1f4; /* <- sampled: heading #eaeaec / value #faf9fc */
+    --text-muted: #d2d1d4; /* <- sampled: selected chip label */
+    --text-passive: #929094; /* <- sampled: muted subtext #808082 */
+
+    --border-subtle: #302f33;
+    --border: #3a393d; /* <- sampled: unselected chip border #38383a */
+    --border-strong: #4a4950;
+
+    /* The action tier is QUIET. The reference's primary button is #3e3d40 —
+       only +21 lightness over the ground — carrying near-white text. A white
+       fill would make every button shout louder than the selection, which is
+       the one thing the reference keeps brightest. */
+    --action-bg: #3e3d40; /* <- sampled: the primary CTA */
+    --action-fg: #eceaef; /* <- sampled: its label #dcdcde */
+    --action-bg-hover: #4a494d;
+    --action-bg-disabled: #2c2c2e;
+    --action-fg-disabled: #6f6d72;
+    --text-disabled: #575659;
+    /* Recedes toward the ground, one step under --border-subtle. */
+    --border-disabled: #343338;
+    /* The disabled checked fill holds the same 2.73:1 against its glyph that
+       --action-fg-disabled holds against --action-bg-disabled, so a disabled
+       control reads as one family rather than three separate accidents. */
+    --selected-border-disabled: #6f6d72;
+    --selected-fg-disabled: #2c2c2e;
+
+    /* The brightest chrome in the reference is the SELECTED outline, at
+       #c9c9cb — bright, but short of white. */
+    --selected-border: #c9c9cb;
+    --selected-bg: rgba(255, 255, 255, 0.05);
+    --reveal-bg: rgba(255, 255, 255, 0.1);
+    --lane-focused-bg: rgba(255, 255, 255, 0.1);
+    --selected-fg: #29282b;
+    --focus-ring: #c9c9cb;
+    --selection-bg: rgba(255, 255, 255, 0.18);
+
+    --scrim: rgba(0, 0, 0, 0.5);
+    /* CRT scanline banding on the sign-in logo, and the contrast halo drawn
+       around a remote collaborator's cursor so it reads against any content.
+       Both are achromatic, which is why they survive Rule 2 unchanged. */
+    --crt-scanline: rgba(0, 0, 0, 0.15);
+    --remote-pointer-stroke: #ffffff;
+
+    /* The base radius (0.625rem). Every rounded-lg in the app steps up. */
+    --radius: 10px;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.15);
+    /* The one card on a page that is "next" (onboarding's first actionable
+       step): a soft drop that reads as lifted without a border step. */
+    --shadow-lift: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+
+    /* -- SIGNAL — the only hue in the app ---------------------------------
+       Raised from the old band once the ground moved off near-black: a status
+       colour tuned against #181b1a loses most of its separation on #29282b.
+       This is now ONE band. The app used to carry a second, louder "dot" band
+       for the same five signals; that band existed to out-shout the old dark
+       ground and has no job left. */
+    --status-ok: #5bbd6e;
+    --status-ok-active: #4da65f;
+    --status-ok-bg: rgba(91, 189, 110, 0.15);
+    --status-err: #ef6a6f;
+    --status-err-bg: rgba(239, 106, 111, 0.15);
+    --status-err-bg-strong: rgba(239, 106, 111, 0.22);
+    --status-err-border: rgba(239, 106, 111, 0.4);
+    --status-warn: #dcab5f;
+    --status-warn-bg: rgba(220, 171, 95, 0.12);
+    --status-running: #7aa2f2;
+    --status-merged: #b49ce0;
+    --status-idle: #6f6d72;
+
+    --diff-add: #78cba0;
+    --diff-del: #ec8d8d;
+
+    /* Identity as a tinted CHIP (avatar circles, collaborator cursors). Hue
+       here is information — it names a person — so it is exempt from Rule 2,
+       and it lives under `--identity-*` so the exemption is visible in the
+       name. Order is load-bearing: a hash indexes these tables, so reordering
+       silently recolours every existing avatar and cursor. Consumed by
+       `utils/color-palettes.ts` through `cssVar()`, never as a utility, which
+       is why none of them are mirrored into @theme. */
+    --identity-self-bg: rgba(122, 106, 168, 0.3);
+    --identity-self-fg: #a392d5;
+    --identity-peer-1-bg: rgba(80, 144, 192, 0.15);
+    --identity-peer-1-fg: #70a8d0;
+    --identity-peer-2-bg: rgba(31, 138, 101, 0.15);
+    --identity-peer-2-fg: #40a880;
+    --identity-peer-3-bg: rgba(144, 112, 176, 0.15);
+    --identity-peer-3-fg: #a890c0;
+    --identity-peer-4-bg: rgba(230, 180, 70, 0.15);
+    --identity-peer-4-fg: #e6b446;
+    --identity-peer-5-bg: rgba(192, 133, 50, 0.15);
+    --identity-peer-5-fg: #c08532;
+    --identity-peer-6-bg: rgba(138, 90, 74, 0.15);
+    --identity-peer-6-fg: #8a5a4a;
+    --identity-peer-7-bg: rgba(106, 79, 139, 0.15);
+    --identity-peer-7-fg: #6b5a8a;
+
+    --identity-cursor-1: #2563eb;
+    --identity-cursor-2: #dc2626;
+    --identity-cursor-3: #16a34a;
+    --identity-cursor-4: #9333ea;
+    --identity-cursor-5: #ea580c;
+    --identity-cursor-6: #0891b2;
+    --identity-cursor-7: #c026d3;
+    --identity-cursor-8: #4f46e5;
+
+    /* -- EDITORS -----------------------------------------------------------
+       Monaco and xterm cannot read Tailwind utilities, so they mirror the
+       scale above as their own flat token set (read by
+       lib/monaco/monaco-themes.ts and lib/pty/pty.ts). Values are the scale,
+       not new colours: retune the scale and retune these with it. */
+    --monaco-bg: #29282b;
+    --monaco-fg: #f2f1f4;
+    --monaco-line-highlight: #2c2c2e;
+    --monaco-line-number: #6f6d72;
+    --monaco-gutter: #29282b;
+    --diff-editor-added-text-bg: rgba(120, 203, 160, 0.14);
+    --diff-editor-added-line-bg: rgba(120, 203, 160, 0.09);
+    --diff-editor-added-text-border: transparent;
+    --diff-editor-deleted-text-bg: rgba(236, 141, 141, 0.12);
+    --diff-editor-deleted-line-bg: rgba(236, 141, 141, 0.08);
+    --diff-editor-deleted-text-border: transparent;
+    --monaco-unchanged-region-bg: #2c2c2e;
+    --monaco-diff-border: #3a393d;
+    --monaco-diff-diagonal-fill: #2c2c2e;
+    --diff-editor-added-gutter-bg: rgba(120, 203, 160, 0.2);
+    --diff-editor-deleted-gutter-bg: rgba(236, 141, 141, 0.18);
+
+    --xterm-bg: #29282b;
+    --xterm-fg: #f2f1f4;
+    --xterm-cursor: #f2f1f4;
+    --xterm-cursor-accent: #29282b;
+    --xterm-selection-bg: rgba(255, 255, 255, 0.18);
+    --xterm-selection-fg: #f2f1f4;
+  }
+
+  /* -- LIGHT -----------------------------------------------------------------
+     The reference ships no light mode, so this mirrors its RELATIONSHIPS
+     rather than inverting its numbers: a ground that is not pure white,
+     surfaces separated by 4-6 points, and an action tier that lifts away from
+     the page instead of shouting. Same violet cast. The light scale is CHOSEN,
+     not computed — inverting a dark ramp step-for-step gives a muddy app. */
+  .chord-light {
+    color-scheme: light;
+
+    --surface-canvas: #e8e6ea;
+    --surface: #f3f2f5;
+    --surface-raised: #f8f7fa;
+    --surface-inset: #ebe9ee;
+
+    --surface-hover: rgba(0, 0, 0, 0.04);
+    --surface-active: rgba(0, 0, 0, 0.07);
+    --surface-hover-solid: #edecf0;
+    --surface-active-solid: #e4e2e8;
+
+    --text: #1c1b1f;
+    --text-muted: #3f3e43;
+    --text-passive: #6e6c72;
+
+    --border-subtle: #e4e2e8;
+    --border: #d5d3da;
+    --border-strong: #bcbac2;
+
+    /* Light cannot mirror the quiet dark pill literally: -21 lightness from
+       #f3f2f5 is #d9d7de, which reads as a disabled control rather than the
+       action. The relationship kept is "the action separates from the page";
+       here that means a dark pill with light text. */
+    --action-bg: #2d2c31;
+    --action-fg: #f3f2f5;
+    --action-bg-hover: #3e3d43;
+    --action-bg-disabled: #dedce3;
+    --action-fg-disabled: #9a989f;
+    --text-disabled: #aeacb3;
+    --border-disabled: #e0dee5;
+    --selected-border-disabled: #9a989f;
+    --selected-fg-disabled: #dedce3;
+
+    --selected-border: #35343a;
+    --selected-bg: rgba(0, 0, 0, 0.045);
+    --reveal-bg: rgba(0, 0, 0, 0.08);
+    --lane-focused-bg: rgba(0, 0, 0, 0.08);
+    --selected-fg: #f3f2f5;
+    --focus-ring: #35343a;
+    --selection-bg: rgba(0, 0, 0, 0.14);
+
+    --scrim: rgba(0, 0, 0, 0.4);
+    /* Much fainter than the dark theme's: the same alpha that reads as texture
+       on a dark ground bands a light one. */
+    --crt-scanline: rgba(0, 0, 0, 0.05);
+    --remote-pointer-stroke: #ffffff;
+
+    --radius: 10px;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-lift: 0 12px 32px -14px rgba(0, 0, 0, 0.18);
+
+    --status-ok: #2a7e3b;
+    --status-ok-active: #236b32;
+    --status-ok-bg: rgba(42, 126, 59, 0.1);
+    --status-err: #c62a2f;
+    --status-err-bg: rgba(198, 42, 47, 0.09);
+    --status-err-bg-strong: rgba(198, 42, 47, 0.16);
+    --status-err-border: rgba(198, 42, 47, 0.4);
+    --status-warn: #8c5c16;
+    --status-warn-bg: rgba(140, 92, 22, 0.1);
+    --status-running: #2a5fc4;
+    --status-merged: #7947c9;
+    --status-idle: #8e8c93;
+
+    --diff-add: #1f7a4d;
+    --diff-del: #c0393f;
+
+    /* Identity chips, darkened to hold contrast on a light ground. The hue —
+       the part that identifies the person — is unchanged from dark. */
+    --identity-self-bg: rgba(109, 73, 181, 0.1);
+    --identity-self-fg: #6d49b5;
+    --identity-peer-1-bg: rgba(59, 130, 246, 0.1);
+    --identity-peer-1-fg: #2563eb;
+    --identity-peer-2-bg: rgba(31, 138, 101, 0.1);
+    --identity-peer-2-fg: #1f8a65;
+    --identity-peer-3-bg: rgba(139, 106, 174, 0.1);
+    --identity-peer-3-fg: #6d49b5;
+    --identity-peer-4-bg: rgba(230, 180, 70, 0.1);
+    --identity-peer-4-fg: #b45309;
+    --identity-peer-5-bg: rgba(192, 133, 50, 0.1);
+    --identity-peer-5-fg: #92400e;
+    --identity-peer-6-bg: rgba(138, 90, 74, 0.1);
+    --identity-peer-6-fg: #78350f;
+    --identity-peer-7-bg: rgba(106, 79, 139, 0.1);
+    --identity-peer-7-fg: #5b21b6;
+
+    --identity-cursor-1: #2563eb;
+    --identity-cursor-2: #dc2626;
+    --identity-cursor-3: #16a34a;
+    --identity-cursor-4: #7c3aed;
+    --identity-cursor-5: #ea580c;
+    --identity-cursor-6: #0891b2;
+    --identity-cursor-7: #c026d3;
+    --identity-cursor-8: #4338ca;
+
+    --monaco-bg: #f3f2f5;
+    --monaco-fg: #1c1b1f;
+    --monaco-line-highlight: #ebe9ee;
+    --monaco-line-number: #8e8c93;
+    --monaco-gutter: #f3f2f5;
+    --diff-editor-added-text-bg: rgba(31, 122, 77, 0.12);
+    --diff-editor-added-line-bg: rgba(31, 122, 77, 0.07);
+    --diff-editor-added-text-border: transparent;
+    --diff-editor-deleted-text-bg: rgba(192, 57, 63, 0.1);
+    --diff-editor-deleted-line-bg: rgba(192, 57, 63, 0.06);
+    --diff-editor-deleted-text-border: transparent;
+    --monaco-unchanged-region-bg: #ebe9ee;
+    --monaco-diff-border: #d5d3da;
+    --monaco-diff-diagonal-fill: #e8e6ea;
+    --diff-editor-added-gutter-bg: rgba(31, 122, 77, 0.18);
+    --diff-editor-deleted-gutter-bg: rgba(192, 57, 63, 0.15);
+
+    /* The terminal keeps the dark scale in both themes — a shell is a dark
+       surface by convention, and inverting it fights every program that paints
+       its own ANSI colours. */
+    --xterm-bg: #252428;
+    --xterm-fg: #f2f1f4;
+    --xterm-cursor: #f2f1f4;
+    --xterm-cursor-accent: #252428;
+    --xterm-selection-bg: rgba(255, 255, 255, 0.18);
+    --xterm-selection-fg: #f2f1f4;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  /* The design scale tops out at --text-display (22px) and its default reading
+     size is --text-body (13px), so inheriting the UA's 16px makes any element
+     that forgets a size token the largest text on screen. Anchor the default to
+     the scale instead. Set on `body`, never `html`: `rem` (all Tailwind spacing)
+     resolves against the root, so moving the root would resize the whole app. */
+  body {
+    @apply bg-surface text-text;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  ::selection {
+    background-color: var(--selection-bg);
+  }
+
+  ::-moz-selection {
+    background-color: var(--selection-bg);
+  }
+
+  /* Scrollbar styles for light and dark mode */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  }
+
+  .chord-dark *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+  }
+
+  .chord-dark *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  }
+}
+
+@layer components {
+  /* A mention token in a rendered chat message: @agent, @everyone, or a
+     teammate. Written as a component class because the pills are produced by a
+     rehype transform of the markdown tree, which emits class names rather
+     than JSX. */
+  .chat-mention {
+    border-radius: var(--radius-sm);
+    padding: 0 3px;
+    background: var(--surface-active);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* The same tint in the composer's highlight backdrop. Padding and weight are
+     deliberately absent: the backdrop has to lay out character-for-character
+     with the textarea in front of it, and anything that changes text metrics
+     drifts the highlight off the words. The inset shadow buys visual padding
+     without occupying any. */
+  .composer-mention {
+    border-radius: var(--radius-sm);
+    background: var(--surface-active);
+    color: var(--text);
+    box-shadow: 0 0 0 2px var(--surface-active);
+  }
+
+  /* Uppercase section headers — "PICK BACK UP", "TEAM PULSE", "QUICK ACTIONS", etc.
+     [cmdk-group-heading] is included because Tailwind arbitrary variants can't compose
+     a component class onto cmdk's internal group headings.
+
+     On the scanned-list label spec (`--text-list-meta` / `--tracking-list-label`),
+     which is what the shipped sidebar and rail use. It was 12px/700/0.06em, so
+     the rail wrote its own 11px/600/0.05em label inline and left a comment
+     saying it deliberately avoided this class — two section-label treatments
+     for one job. This is the single definition both now describe; every use of
+     the class is a label over a collection, which is exactly the case the
+     list tier's sub-floor size is granted for. */
+  .section-header,
+  [cmdk-group-heading] {
+    font-size: var(--text-list-meta);
+    line-height: var(--text-list-meta--line-height);
+    font-weight: 600;
+    letter-spacing: var(--tracking-list-label);
+    text-transform: uppercase;
+    color: var(--text-passive);
+  }
+
+  .logo-shimmer-container {
+    position: relative;
+    display: inline-block;
+    height: 2.25rem;
+  }
+
+  .logo-shimmer-image {
+    display: block;
+    height: 100%;
+    width: auto;
+  }
+
+  .logo-shimmer-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .logo-shimmer-overlay::before {
+    content: '';
+    position: absolute;
+    inset: -20% 0;
+    width: 70%;
+    background: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.28) 30%,
+      rgba(255, 255, 255, 0.75) 50%,
+      rgba(255, 255, 255, 0.28) 70%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-15deg) translateX(-150%);
+    animation: logo-shimmer-move 2.5s linear 5;
+    will-change: transform;
+  }
+
+  .chord-dark .logo-shimmer-image {
+    animation: logo-fade-in 12.5s linear forwards;
+  }
+
+  .chord-dark .logo-shimmer-overlay::before {
+    background: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.5) 30%,
+      rgba(255, 255, 255, 1) 50%,
+      rgba(255, 255, 255, 0.5) 70%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  @keyframes logo-fade-in {
+    0% {
+      opacity: 0.5;
+    }
+    90% {
+      opacity: 0.5;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes logo-shimmer-move {
+    0% {
+      transform: skewX(-15deg) translateX(-150%);
+    }
+    100% {
+      transform: skewX(-15deg) translateX(250%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .logo-shimmer-overlay::before {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
+  /* Diff glyph-margin indicators — +/- characters matching work-prototype style */
+  .diff-glyph-added::after,
+  .diff-glyph-deleted::after {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .diff-glyph-added::after {
+    content: '+';
+    color: var(--diff-add);
+  }
+
+  .diff-glyph-deleted::after {
+    content: '\2212';
+    color: var(--diff-del);
+  }
+
+  /* Monaco diff comment UI */
+  .file-diff-view .monaco-editor .margin-view-overlays .glyph-margin {
+    width: 20px !important;
+  }
+
+  .file-diff-view .monaco-editor .margin {
+    background-color: transparent !important;
+  }
+
+  .file-diff-view .comment-hover-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: 1px auto;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    pointer-events: auto;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .file-diff-view .comment-hover-icon::before {
+    content: '';
+    display: block;
+    width: 12px;
+    height: 12px;
+    background-color: currentColor;
+    color: var(--text-muted);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='5' x2='12' y2='19'%3E%3C/line%3E%3Cline x1='5' y1='12' x2='19' y2='12'%3E%3C/line%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='5' x2='12' y2='19'%3E%3C/line%3E%3Cline x1='5' y1='12' x2='19' y2='12'%3E%3C/line%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+  }
+
+  .file-diff-view .comment-hover-icon:hover,
+  .file-diff-view .comment-hover-icon.comment-hover-icon-pinned {
+    background-color: var(--surface-inset);
+    border-color: var(--border);
+  }
+
+  .file-diff-view .comment-hover-icon:hover::before,
+  .file-diff-view .comment-hover-icon.comment-hover-icon-pinned::before {
+    color: var(--text);
+  }
+
+  .file-diff-view .monaco-editor .glyph-margin > div {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .file-diff-view .monaco-editor .view-zones,
+  .file-diff-view .monaco-editor .view-zone,
+  .file-diff-view .comment-view-zone {
+    pointer-events: auto !important;
+  }
+
+  /* ── ACP Component Animations ── */
+
+  /* Pulsing shimmer dot for in-progress tool call status */
+  .tool-call-shimmer {
+    background: var(--action-bg);
+    animation: tool-call-shimmer-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes tool-call-shimmer-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Subtle left accent on running tool-call badges */
+  .tool-call-badge-running {
+    box-shadow: inset 2px 0 0 var(--action-bg);
+  }
+
+  /* Animated ellipsis for "Thinking..." state */
+  .thinking-dots::after {
+    content: '';
+    animation: thinking-dots-cycle 1.2s steps(4, end) infinite;
+  }
+
+  @keyframes thinking-dots-cycle {
+    0% {
+      content: '';
+    }
+    25% {
+      content: '.';
+    }
+    50% {
+      content: '..';
+    }
+    75% {
+      content: '...';
+    }
+  }
+
+  /* Orange asterisk thinking indicator */
+  @keyframes thinking-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: rotate(0deg);
+    }
+    50% {
+      opacity: 0.5;
+      transform: rotate(90deg);
+    }
+  }
+
+  .thinking-asterisk {
+    /* Ambient indicator, drawn at display size and already pulsing, so it sits
+       one step below --text. It was a fill token, which is invisible here. */
+    color: var(--text-muted);
+    font-size: var(--text-display);
+    line-height: 1;
+    animation: thinking-pulse 1.8s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+  }
+
+  /* Height expand-in for tool call content panels */
+  .animate-expand-in {
+    animation: expand-in 0.2s ease-out;
+  }
+
+  @keyframes expand-in {
+    from {
+      opacity: 0;
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      max-height: 300px;
+    }
+  }
+
+  /* Staggered fade+slide for tool call sequence items */
+  .animate-stagger-in {
+    animation: stagger-in 0.15s ease-out both;
+  }
+
+  @keyframes stagger-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ── Dashboard Entrance ── */
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-up {
+    animation: fade-up 300ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  }
+
+  /* ── CRT Auth Gate Animations ── */
+
+  @keyframes scanline-drift {
+    from {
+      background-position-y: 0;
+    }
+    to {
+      background-position-y: 100px;
+    }
+  }
+
+  @keyframes phosphor-pulse {
+    0%,
+    100% {
+      text-shadow:
+        0 0 8px rgba(255, 102, 0, 0.5),
+        0 0 20px rgba(255, 102, 0, 0.2);
+    }
+    50% {
+      text-shadow:
+        0 0 12px rgba(255, 102, 0, 0.7),
+        0 0 28px rgba(255, 102, 0, 0.3);
+    }
+  }
+
+  @keyframes cursor-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* ── Replit-style Tool Group ── */
+
+  .tool-group {
+    border: 1px solid var(--border);
+    background: var(--surface-inset);
+  }
+
+  .tool-group-header,
+  .tool-group-header-expanded {
+    border-radius: var(--radius-sm);
+  }
+
+  .tool-group-body {
+    border-top: 1px solid var(--border);
+  }
+
+  .tool-group-body > div + div {
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .tool-row:hover .tool-row-action {
+    opacity: 1;
+  }
+
+  .tool-content-block {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    padding: 8px 10px;
+  }
+
+  .thinking-expanded {
+    background: var(--surface-inset);
+  }
+
+  /* Formatting bar removed — the editor uses Notion-style affordances
+     (floating bubble on select, "/" slash menu, drag-handle block menu). */
+
+  /* ── Artifact Editor (Tiptap) ── */
+  .artifact-editor-content {
+    color: var(--text);
+    caret-color: var(--text);
+    font-size: var(--text-doc-body);
+    line-height: var(--text-doc-body--line-height);
+  }
+
+  /* Comments: the quoted text, and the thread's number where it starts
+     (document-comment-badges.ts). */
+  .artifact-editor-content .chord-comment-anchor {
+    background: var(--status-warn-bg);
+    border-bottom: 1px solid var(--status-warn);
+  }
+  .artifact-editor-content .chord-comment-anchor.is-selected {
+    background: var(--selection-bg);
+  }
+  .artifact-editor-content .chord-comment-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    margin-right: 2px;
+    padding: 0 4px;
+    border-radius: 999px 999px 999px 2px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: text-top;
+    cursor: pointer;
+    user-select: none;
+  }
+  .artifact-editor-content .chord-comment-badge.is-selected {
+    background: var(--action-bg);
+    border-color: var(--action-bg);
+    color: var(--action-fg);
+  }
+
+  /* Headings */
+  .artifact-editor-content h1 {
+    font-size: var(--text-doc-h1);
+    font-weight: 700;
+    line-height: var(--text-doc-h1--line-height);
+    color: var(--text);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .artifact-editor-content h2 {
+    font-size: var(--text-doc-h2);
+    font-weight: 600;
+    line-height: var(--text-doc-h2--line-height);
+    color: var(--text);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .artifact-editor-content h3 {
+    font-size: var(--text-doc-h3);
+    font-weight: 600;
+    line-height: var(--text-doc-h3--line-height);
+    color: var(--text);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  /* h4 and below carry no size step of their own — weight is the only signal
+     left before body copy, which is why they share --text-doc-body. */
+  .artifact-editor-content h4,
+  .artifact-editor-content h5,
+  .artifact-editor-content h6 {
+    font-size: var(--text-doc-body);
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 1.25em;
+    margin-bottom: 0.4em;
+  }
+
+  /* First heading should not have top margin */
+  .artifact-editor-content > :first-child {
+    margin-top: 0;
+  }
+
+  /* Paragraphs */
+  .artifact-editor-content p {
+    color: var(--text-muted);
+    margin-bottom: 0.75em;
+  }
+
+  .artifact-editor-content a {
+    /* A link is already marked by its underline, so it carries the top text
+       step rather than a fill token: it must lift above the --text-muted body
+       around it, and --action-bg is a surface value that renders at 1.3:1 on
+       the dark ground. */
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .artifact-editor-content a:hover {
+    opacity: 0.85;
+  }
+
+  /* Blockquotes */
+  .artifact-editor-content blockquote {
+    border-left: 3px solid var(--border-strong);
+    padding-left: 16px;
+    margin: 1em 0;
+    color: var(--text-passive);
+    font-style: italic;
+  }
+
+  /* Inline code */
+  .artifact-editor-content code {
+    background: var(--surface-inset);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0.15em 0.3em;
+    font-size: 0.9em;
+  }
+
+  /* Code blocks */
+  .artifact-editor-content pre {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 16px;
+    margin: 1em 0;
+    overflow-x: auto;
+    font-size: var(--text-code);
+    line-height: var(--text-body--line-height);
+  }
+
+  .artifact-editor-content pre code {
+    background: transparent;
+    padding: 0;
+    font-size: inherit;
+    border-radius: 0;
+  }
+
+  /* Horizontal rule */
+  .artifact-editor-content hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.5em 0;
+  }
+
+  /* Lists */
+  .artifact-editor-content ul,
+  .artifact-editor-content ol {
+    padding-left: 1.5em;
+    margin: 0.75em 0;
+    color: var(--text-muted);
+  }
+
+  .artifact-editor-content li {
+    margin-bottom: 0.25em;
+  }
+
+  .artifact-editor-content li p {
+    margin-bottom: 0.25em;
+  }
+
+  /* Task list */
+  .artifact-editor-content ul[data-type='taskList'] {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .artifact-editor-content ul[data-type='taskList'] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .artifact-editor-content ul[data-type='taskList'] li > label input[type='checkbox'] {
+    accent-color: var(--action-bg);
+    margin-top: 4px;
+  }
+
+  /* Tables */
+  /* Tabular data is scanned, not read, so it drops to the app tier rather than
+     carrying a size step of its own (the old 14px was on no scale at all). */
+  .artifact-editor-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  .artifact-editor-content th {
+    background: var(--surface-inset);
+    font-weight: 600;
+    color: var(--text);
+    text-align: left;
+    padding: 8px 12px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .artifact-editor-content td {
+    padding: 8px 12px;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+  }
+
+  .artifact-editor-content tr:nth-child(even) td {
+    background: var(--surface-raised);
+  }
+
+  /* Images */
+  .artifact-editor-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-sm);
+    margin: 1em 0;
+  }
+
+  /* Highlight mark — Highlight extension applies inline background-color per
+     swatch; this gives padding/rounding and a token default when uncolored. */
+  .artifact-editor-content mark {
+    background-color: var(--selection-bg);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0.05em 0.2em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* Mermaid diagrams */
+  .mermaid-container {
+    display: flex;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    padding: 16px;
+    margin: 1em 0;
+    overflow-x: auto;
+  }
+
+  .mermaid-svg svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Placeholder */
+  .artifact-editor-content .is-empty::before {
+    color: var(--text-passive);
+  }
+
+  /* ── Collaboration Cursors ── */
+  .collaboration-cursor__caret {
+    position: relative;
+    border-left: 2px solid;
+    border-color: inherit;
+    margin-left: -1px;
+    margin-right: -1px;
+    pointer-events: none;
+    word-break: normal;
+  }
+
+  .collaboration-cursor__label {
+    position: absolute;
+    top: -1.4em;
+    left: -1px;
+    font-size: var(--text-micro);
+    font-weight: 600;
+    line-height: 1;
+    padding: 1px 4px;
+    border-radius: 3px 3px 3px 0;
+    color: var(--selected-fg);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    opacity: 1;
+    transition: opacity 0.2s;
+  }
+
+  .collaboration-cursor__label::selection {
+    background: none;
+  }
+
+  /* Selection highlights for remote users */
+  .ProseMirror .selection-decoration {
+    opacity: 0.3;
+  }
+
+  /* ── Remote Pointers ── */
+  .remote-pointer {
+    position: absolute;
+    transition:
+      opacity 0.3s ease,
+      left 0.1s linear,
+      top 0.1s linear;
+    will-change: left, top, opacity;
+  }
+
+  .remote-pointer__label {
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    font-size: var(--text-micro);
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--selected-fg);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tool-call-shimmer,
+    .thinking-dots::after,
+    .thinking-asterisk,
+    .animate-expand-in,
+    .animate-stagger-in,
+    .skeleton,
+    .breathing-dots span {
+      animation: none;
+    }
+    .thinking-dots::after {
+      content: '...';
+    }
+    .skeleton {
+      background: var(--surface-hover-solid);
+    }
+    .breathing-dots span {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* ── Frosted Glass Material ── */
+  .floating-surface {
+    background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    box-shadow:
+      0 8px 28px -8px rgba(0, 0, 0, 0.7),
+      0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .chord-light .floating-surface {
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 8px 28px -8px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .floating-surface {
+      background: var(--surface-hover-solid);
+      backdrop-filter: none;
+    }
+    .chord-light .floating-surface {
+      background: var(--surface-hover-solid);
+      backdrop-filter: none;
+    }
+  }
+
+  /* Opaque variant for list menus that float over dense text (composer
+     suggestion menus): translucency there reads as two texts overlapping. */
+  .floating-surface-solid {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    box-shadow:
+      0 8px 28px -8px rgba(0, 0, 0, 0.7),
+      0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .chord-light .floating-surface-solid {
+    background: var(--surface-raised);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.08),
+      0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  /* ── Popover/Dropdown Transform Origin (Emil Kowalski: scale from trigger, not center) ──
+     Modals are exempt — they stay transform-origin: center. */
+  [data-slot='popover-content'][data-side='bottom'],
+  [data-slot='dropdown-menu-content'][data-side='bottom'],
+  [data-slot='context-menu-content'][data-side='bottom'],
+  [data-slot='combobox-content'][data-side='bottom'],
+  [data-slot='select-content'][data-side='bottom'] {
+    transform-origin: top center;
+  }
+  [data-slot='popover-content'][data-side='top'],
+  [data-slot='dropdown-menu-content'][data-side='top'],
+  [data-slot='context-menu-content'][data-side='top'],
+  [data-slot='combobox-content'][data-side='top'],
+  [data-slot='select-content'][data-side='top'] {
+    transform-origin: bottom center;
+  }
+  [data-slot='popover-content'][data-side='left'],
+  [data-slot='dropdown-menu-content'][data-side='left'],
+  [data-slot='context-menu-content'][data-side='left'],
+  [data-slot='combobox-content'][data-side='left'],
+  [data-slot='select-content'][data-side='left'] {
+    transform-origin: center right;
+  }
+  [data-slot='popover-content'][data-side='right'],
+  [data-slot='dropdown-menu-content'][data-side='right'],
+  [data-slot='context-menu-content'][data-side='right'],
+  [data-slot='combobox-content'][data-side='right'],
+  [data-slot='select-content'][data-side='right'] {
+    transform-origin: center left;
+  }
+
+  /* ── Skeleton Shimmer ── */
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-inset) 0%,
+      var(--surface-hover-solid) 40%,
+      var(--surface-inset) 80%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.8s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── Breathing Dots (agent streaming indicator) ── */
+  @keyframes breathing-dot {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.85);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .breathing-dots span {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--action-bg);
+    animation: breathing-dot 1.4s ease-in-out infinite;
+  }
+
+  .breathing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .breathing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  /* ── Tooltip instant mode (skip animation on sequential hovers) ── */
+  [data-slot='tooltip-content'][data-instant] {
+    animation-duration: 0ms !important;
+  }
+}
+
+/* Settings shell (devstation-9kwt): the settings rail slides in over the
+   sessions rail and the content cross-fades. Same width both ways, so the
+   main column never moves. */
+@keyframes rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-rail-in {
+  animation: rail-in 220ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-pane-in {
+  animation: pane-in 220ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}

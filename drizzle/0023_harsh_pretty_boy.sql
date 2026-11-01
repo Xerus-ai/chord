@@ -1,0 +1,1 @@
+ALTER TABLE `sync_queue` ADD `entity_type` text DEFAULT 'work_item' NOT NULL;

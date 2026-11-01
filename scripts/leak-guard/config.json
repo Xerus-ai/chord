@@ -1,0 +1,33 @@
+{
+  "placeholder_passwords": ["password", "pass", "pw", "secret", "changeme", "postgres", "pglite"],
+  "personal_email_domains": [
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "yahoo.com",
+    "icloud.com",
+    "me.com",
+    "proton.me",
+    "protonmail.com"
+  ],
+  "placeholder_email_locals": [
+    "someone",
+    "user",
+    "test",
+    "you",
+    "name",
+    "example",
+    "me",
+    "foo",
+    "bar",
+    "nobody"
+  ],
+  "reserved_email_domains": ["example.com", "example.org", "example.net"],
+  "reserved_tlds": ["test", "example", "invalid", "localhost", "local"],
+  "allowed_hosts": ["acme.corp"],
+  "fixture_dirs": ["_testing/"],
+  "allowed_paths": ["LICENSES/", "NOTICE", "pnpm-lock.yaml"],
+  "note": "scripts/leak-guard/public_rules.py (devstation-y74s.1): the leak guard's allowlists, the only ones. CI runs the public rules (scan.py); the maintainer's local guard imports them and adds live .env values and machine paths."
+}

@@ -1,0 +1,1 @@
+DROP TABLE `agent_room_cursors`;

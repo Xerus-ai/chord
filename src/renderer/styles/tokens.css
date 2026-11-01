@@ -1,0 +1,116 @@
+/* Chord design tokens that live outside index.css: layout sizes, the
+   transcript rhythm, the per-person identity colours and the scanned-list
+   type tier. Imported once from index.css. */
+
+@layer base {
+  /* Values that are the same in both themes. */
+  :root {
+    /* Control heights: buttons, inputs and segmented controls share these. */
+    --control-h-xs: 28px;
+    --control-h-sm: 32px;
+    --control-h-md: 44px;
+
+    /* Layout limits. Reading width for the transcript and composer, the
+       smallest a pane may shrink to, and the width below which a diff falls
+       back from side-by-side to a single column. */
+    --max-content-width: 820px;
+    --pane-min-width: 400px;
+    --pane-min-height: 240px;
+    --diff-split-min-width: 700px;
+
+    /* Tab strip: tab width range and the fade at an overflowing edge. */
+    --tab-min-width: 96px;
+    --tab-max-width: 160px;
+    --tab-overflow-fade: 48px;
+
+    /* Transcript spacing, largest to smallest: between turns, between blocks
+       in one turn, between adjacent items of one kind, and flush. */
+    --stream-gap-turn: 16px;
+    --stream-gap-block: 12px;
+    --stream-gap-adjacent: 4px;
+    --stream-gap-tight: 0px;
+
+    /* Identity fills: ten avatar backgrounds, one per slot a person or agent
+       hashes to, with white initials on top. */
+    --identity-1: #7a6aa8;
+    --identity-2: #3d7ea6;
+    --identity-3: #388068;
+    --identity-4: #a4673a;
+    --identity-5: #b05c80;
+    --identity-6: #6a70b8;
+    --identity-7: #368080;
+    --identity-8: #b06260;
+    --identity-9: #8f7838;
+    --identity-10: #5179b0;
+    --identity-foreground-on-fill: #ffffff;
+  }
+
+  /* Identity text, dark theme: the same ten hues lifted so a name stays
+     readable on a dark surface. */
+  .chord-dark {
+    --identity-fg-1: #a392d5;
+    --identity-fg-2: #6aa6ce;
+    --identity-fg-3: #6cae96;
+    --identity-fg-4: #cc8f64;
+    --identity-fg-5: #d87da3;
+    --identity-fg-6: #9299d5;
+    --identity-fg-7: #6cacab;
+    --identity-fg-8: #d88381;
+    --identity-fg-9: #b29d64;
+    --identity-fg-10: #7ba1d5;
+  }
+
+  /* Identity text, light theme: the same ten hues deepened for a light
+     surface. */
+  .chord-light {
+    --identity-fg-1: #6d49b5;
+    --identity-fg-2: #3d6985;
+    --identity-fg-3: #3e6e5d;
+    --identity-fg-4: #845838;
+    --identity-fg-5: #974168;
+    --identity-fg-6: #5251c2;
+    --identity-fg-7: #3e6d6c;
+    --identity-fg-8: #9c4243;
+    --identity-fg-9: #716239;
+    --identity-fg-10: #39649e;
+  }
+
+  /* List rows in the sidebar and right rail. The transparent border keeps a
+     row the same size whether or not it is highlighted; hover and the active
+     row take the theme's translucent washes. */
+  .list-card {
+    border: 1px solid transparent;
+  }
+
+  .list-card:hover {
+    background: var(--surface-hover);
+  }
+
+  .list-card[data-active='true'],
+  .list-card[data-active='true']:hover {
+    background: var(--surface-active);
+  }
+}
+
+@theme inline {
+  /* Content text: the reading size for chat messages and the composer. */
+  --text-content: 15px;
+  --text-content--line-height: 1.6;
+
+  /* Icon sizes, usable as size-icon-* utilities. */
+  --spacing-icon-xs: 12px;
+  --spacing-icon-sm: 14px;
+  --spacing-icon-md: 16px;
+  --spacing-icon-lg: 20px;
+
+  /* Scanned-list tier: row titles, the metadata under them and count badges.
+     Smaller than the app tier in index.css because rows are scanned, not
+     read. */
+  --text-list-row: 13px;
+  --text-list-row--line-height: 20px;
+  --text-list-meta: 11px;
+  --text-list-meta--line-height: 1.3;
+  --text-list-badge: 10px;
+  --text-list-badge--line-height: 1;
+  --tracking-list-label: 0.05em;
+}

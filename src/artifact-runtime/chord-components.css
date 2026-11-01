@@ -1,0 +1,265 @@
+/*
+ * Styles for the vendored chord-components inside an artifact page. Every
+ * colour is a token from the generated sheet (tokens.css, derived from
+ * renderer/index.css) — no literal colour lives here. Hue appears only on the
+ * Callout, through --status-*, because a callout's type IS its meaning.
+ */
+
+.chord-page {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+.chord-page-embedded {
+  background: transparent;
+}
+
+.chord-page img,
+.chord-page svg,
+.chord-page canvas {
+  max-width: 100%;
+}
+
+/* ---- Callout ---- */
+
+.chord-callout {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+.chord-callout-icon {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.chord-callout-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.chord-callout-title {
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.chord-callout-text {
+  color: var(--text-muted);
+}
+
+.chord-callout-info .chord-callout-icon {
+  color: var(--status-running);
+}
+
+.chord-callout-warning .chord-callout-icon {
+  color: var(--status-warn);
+}
+
+.chord-callout-error {
+  border-color: var(--status-err-border);
+  background: var(--status-err-bg);
+}
+
+.chord-callout-error .chord-callout-icon,
+.chord-callout-error .chord-callout-title {
+  color: var(--status-err);
+}
+
+.chord-callout-success .chord-callout-icon {
+  color: var(--status-ok);
+}
+
+/* ---- Code block ---- */
+
+.chord-code {
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+}
+
+.chord-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-passive);
+}
+
+.chord-code-copy {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chord-code-copy:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.chord-code-body {
+  margin: 0;
+  padding: 12px 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.chord-code-line {
+  display: flex;
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.chord-code-number {
+  width: 2.5em;
+  flex: none;
+  text-align: right;
+  padding-right: 1em;
+  color: var(--text-disabled);
+  user-select: none;
+}
+
+/* ---- Interactive table ---- */
+
+.chord-table {
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.chord-table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+
+.chord-table-caption {
+  font-weight: 500;
+}
+
+.chord-table-filter {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-inset);
+  font: inherit;
+  color: var(--text);
+}
+
+.chord-table-filter:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.chord-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.chord-table th,
+.chord-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chord-table th {
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chord-table th:hover {
+  color: var(--text);
+}
+
+.chord-table-sort {
+  margin-left: 4px;
+}
+
+.chord-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.chord-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.chord-table-empty {
+  text-align: center;
+  color: var(--text-passive);
+}
+
+.chord-table-footer {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+  font-size: 12px;
+  color: var(--text-passive);
+}
+
+/* ---- Mermaid ---- */
+
+.chord-mermaid {
+  margin: 16px 0;
+  text-align: center;
+}
+
+.chord-mermaid-loading {
+  padding: 32px;
+  color: var(--text-passive);
+}
+
+.chord-mermaid-caption {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-passive);
+}
+
+.chord-mermaid-error {
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--status-err-border);
+  border-radius: var(--radius);
+  background: var(--status-err-bg);
+}
+
+.chord-mermaid-error-title {
+  font-weight: 600;
+  color: var(--status-err);
+}
+
+.chord-mermaid-error-message,
+.chord-mermaid-error-source {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}

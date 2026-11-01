@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `idx_artifacts_work_item_file_path` ON `artifacts` (`work_item_id`,`file_path`);

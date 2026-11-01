@@ -1,0 +1,22 @@
+# gitleaks' own rules, plus one it does not have: a connection string carrying a real password
+# (devstation-4wqc). The pattern and the placeholders it lets through mirror the leak guard's
+# connection-string rule (scripts/leak-guard/public_rules.py and config.json). gitleaks reads this
+# file from the repository root, so CI's leak scan job and the local hooks both use it.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "connection-string"
+description = "A database or broker URL with a real password in it"
+regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?)://[^\s/:@'"`]+:([^\s@'"`]+)@'''
+secretGroup = 1
+keywords = ["postgres", "mysql", "mongodb", "redis", "amqp"]
+
+[[rules.allowlists]]
+description = "Placeholder passwords, as in scripts/leak-guard/config.json"
+regexTarget = "secret"
+regexes = [
+  '''(?i)^(?:password|pass|pw|secret|changeme|postgres|pglite)$''',
+  '''^(?:<.*>|\$\{.*\}|\{.*\}|\*+|[xX]+)$''',
+]

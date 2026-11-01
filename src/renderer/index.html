@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chord</title>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('chord-theme');
+          var pref = raw ? JSON.parse(raw) : null;
+          var effective =
+            pref === 'chord-light' || pref === 'chord-dark'
+              ? pref
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'chord-dark'
+                : 'chord-light';
+          document.documentElement.classList.add(effective);
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

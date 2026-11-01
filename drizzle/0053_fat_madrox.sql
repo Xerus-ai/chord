@@ -1,0 +1,1 @@
+ALTER TABLE `work_item_worktrees` ADD `checkout_origin` text DEFAULT 'chord' NOT NULL;

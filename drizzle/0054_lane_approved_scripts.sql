@@ -1,0 +1,1 @@
+ALTER TABLE `work_item_worktrees` ADD `approved_scripts` text;

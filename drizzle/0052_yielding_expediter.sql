@@ -1,0 +1,1 @@
+CREATE INDEX `idx_agent_sessions_external_session_id` ON `agent_sessions` (`external_session_id`);

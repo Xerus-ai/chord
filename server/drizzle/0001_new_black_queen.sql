@@ -1,0 +1,1 @@
+ALTER TABLE "work_item_git_files" ADD COLUMN "content_hash" text DEFAULT '' NOT NULL;

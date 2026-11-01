@@ -1,0 +1,6 @@
+# Checked false positives (gitleaks file:rule:line fingerprints).
+#
+# parse-deep-link.test.ts:19 — a made-up public-link token in a deep-link parser test.
+# Real tokens are base64url(HMAC-SHA256(linkId, SHARE_LINK_SECRET)) = 43 characters
+# (server/src/access/share-link-tokens.ts); this one is 42 and derives from nothing.
+src/main/core/deep-links/parse-deep-link.test.ts:generic-api-key:19
