@@ -1,0 +1,24 @@
+{
+  "note": "The app's risk tier, one source for GitHub and the harness (devstation-4x42.56, 4x42.57). A change is high tier when a changed path matches high_paths or it changes more than max_changed_lines lines outside uncounted; the harness adds its own enforcer paths and the bead's area labels. scripts/auto-merge.mjs reads this file from the default branch, so a PR cannot loosen its own tier; this file, the workflows and the decision script are high paths themselves.",
+  "max_changed_lines": 300,
+  "high_paths": [
+    "src/main/db/**",
+    "drizzle/**",
+    "server/drizzle/**",
+    "server/src/db/migrations/**",
+    "src/main/core/pty/**",
+    "src/main/core/ssh/**",
+    "src/main/core/updates/**",
+    "server/src/middleware/auth.ts",
+    "server/src/ws/authorize.ts",
+    "server/src/access/**",
+    "src/main/core/account/**",
+    "src/main/core/shared/oauth-flow.ts",
+    "src/main/core/github/services/gh-cli-token.ts",
+    "src/main/core/execution-context/github-auth-execution-context.ts",
+    ".github/risk-tiers.json",
+    ".github/workflows/**",
+    "scripts/auto-merge.mjs"
+  ],
+  "uncounted": ["pnpm-lock.yaml"]
+}
