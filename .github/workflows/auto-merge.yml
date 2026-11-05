@@ -1,0 +1,82 @@
+# GitHub merges a low-risk PR by itself (devstation-4x42.57). The harness posts two commit statuses
+# on a PR head: `risk-tier` (low, or high: <why>) and then `verifier` (the fresh-context review's
+# verdict, which the main ruleset requires). When a status arrives or CI completes,
+# scripts/auto-merge.mjs decides from the PR, its files, the head's statuses and its check runs.
+# The tier is not taken on trust: the script computes it again from the PR's changed files and
+# lines against .github/risk-tiers.json, both as they are on the default branch, and the stricter
+# tier wins; a file list GitHub cuts short or cannot give is high. A low-tier PR with every check
+# green and an APPROVE verdict gets auto-merge, so GitHub merges it once the ruleset is satisfied;
+# a high-tier PR waits for the permit agent's `permit` status; a red check or a failed verdict
+# turns auto-merge off. A new push turns it off too, so every head is decided again on its own
+# statuses. status, workflow_run and pull_request_target run this file and the script as they are
+# on the default branch: no PR code runs with this token. Needs the repository's "Allow auto-merge".
+name: Auto-merge
+
+on:
+  status:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  pull_request_target:
+    types: [synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: read
+  checks: read
+
+jobs:
+  hold:
+    name: auto-merge hold
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: A new head waits for its own statuses
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          on=$(gh pr view "$PR" -R "$REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$on" = true ]; then gh pr merge "$PR" -R "$REPO" --disable-auto; fi
+
+  decide:
+    name: auto-merge decide
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: auto-merge-${{ github.event.sha || github.event.workflow_run.head_sha }}
+    steps:
+      # The default branch: the script and the tier list that decide are main's, never a PR's.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Decide each open PR whose head is this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.sha || github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          for pr in $(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[] | select(.state == "open") | .number'); do
+            gh pr view "$pr" -R "$REPO" --json number,state,isDraft,headRefOid,baseRefName,autoMergeRequest,changedFiles > "$RUNNER_TEMP/pr.json"
+            # Every page of the PR's files; a listing that fails leaves no file, which the script reads as high.
+            if ! gh api --paginate "repos/$REPO/pulls/$pr/files" --jq '.[] | {filename, previous_filename, changes}' > "$RUNNER_TEMP/files.jsonl"; then
+              rm -f "$RUNNER_TEMP/files.jsonl"
+            fi
+            gh api "repos/$REPO/commits/$SHA/status" > "$RUNNER_TEMP/status.json"
+            gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" > "$RUNNER_TEMP/checks.json"
+            decision=$(node scripts/auto-merge.mjs --sha "$SHA" --base main --tiers .github/risk-tiers.json \
+              --pr "$RUNNER_TEMP/pr.json" --files "$RUNNER_TEMP/files.jsonl" \
+              --status "$RUNNER_TEMP/status.json" --checks "$RUNNER_TEMP/checks.json" \
+              --tier-context risk-tier --verifier-context verifier --permit-context permit \
+              --ignore-check "auto-merge hold" --ignore-check "auto-merge decide")
+            echo "PR #$pr: $decision"
+            action=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).action)' "$decision")
+            if [ "$action" = enable ]; then gh pr merge "$pr" -R "$REPO" --auto --merge --match-head-commit "$SHA"; fi
+            if [ "$action" = disable ]; then gh pr merge "$pr" -R "$REPO" --disable-auto; fi
+          done
