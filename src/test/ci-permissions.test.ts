@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * CI's GITHUB_TOKEN gets only what its steps use (devstation-i3y5.3). Without a `permissions:`
  * block the token gets the repository default on push to main, while steps run `pnpm install`
- * lifecycle scripts. Every CI step reads the repository at most (checkout, the pnpm cache and the
- * artifact upload use the runner's own token), so the workflow grants `contents: read` and no job
- * asks for more. ci.yml is read as text: a top-level key starts at column 0, a job at two spaces.
+ * lifecycle scripts. Every CI step reads the repository at most: checkout and the leak scan's fetch
+ * use GITHUB_TOKEN to read contents, and the pnpm cache and the artifact upload use the runner's own
+ * token, so the workflow grants `contents: read` and no job asks for more. ci.yml is read as text: a top-level key starts at column 0, a job at two spaces.
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ci = readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8').replace(
