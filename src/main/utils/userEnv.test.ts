@@ -5,14 +5,23 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ensureUserBinDirsInPath, ensureWindowsNpmGlobalBinInPath } from './userEnv';
 
 const originalPath = process.env.PATH;
+const binDirs: string[] = [];
 
 afterEach(() => {
   process.env.PATH = originalPath;
+  // Each case's bin folder goes with it, pass or fail (devstation-i3y5.5).
+  for (const dir of binDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
+
+function makeBinDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chord-user-bin-'));
+  binDirs.push(dir);
+  return dir;
+}
 
 describe('ensureUserBinDirsInPath', () => {
   it('prepends existing user bin directories to process PATH', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chord-user-bin-'));
+    const dir = makeBinDir();
     process.env.PATH = '/usr/bin';
 
     const added = ensureUserBinDirsInPath([dir]);
@@ -22,7 +31,7 @@ describe('ensureUserBinDirsInPath', () => {
   });
 
   it('does not duplicate existing path entries', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chord-user-bin-'));
+    const dir = makeBinDir();
     process.env.PATH = [dir, '/usr/bin'].join(path.delimiter);
 
     const added = ensureUserBinDirsInPath([dir]);
