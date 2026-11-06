@@ -10,6 +10,6 @@
     // E2E suites, run as `node scripts/e2e/<suite>.mjs`.
     "scripts/e2e/*.mjs",
     // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
-    "scripts/release/*.ts"
-  ]
+    "scripts/release/*.ts",
+  ],
 }
