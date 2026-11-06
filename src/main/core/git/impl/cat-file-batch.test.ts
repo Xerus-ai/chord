@@ -1,12 +1,25 @@
 import { execSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatFileBatch } from './cat-file-batch';
+
+const repos: string[] = [];
+
+// Each case's repository goes with it, pass or fail (devstation-i3y5.5). The
+// batch is disposed inside the case, but dispose() only signals its
+// `git cat-file` child: on Windows the exiting child holds the folder (EPERM)
+// until it is gone, so the removal is retried until it lands.
+afterEach(async () => {
+  for (const dir of repos.splice(0)) {
+    await vi.waitFor(() => rmSync(dir, { recursive: true, force: true }), { timeout: 10_000 });
+  }
+});
 
 function makeTempRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), 'chord-catfile-'));
+  repos.push(dir);
   execSync('git init', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.email "t@test.local"', { cwd: dir, stdio: 'pipe' });
   execSync('git config user.name "test"', { cwd: dir, stdio: 'pipe' });
