@@ -22,13 +22,17 @@ afterAll(() => {
   fs.rmSync(temp, { recursive: true, force: true });
 });
 
-/** This worker's environment without its vitest variables, which would make the child a worker. */
+/**
+ * This worker's environment without its vitest variables, which would make the
+ * child a worker, and without colour: CI sets `CI`, which colours the child's
+ * report, and its summary is read below as text.
+ */
 function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (!/^VITEST/i.test(key) && key !== 'NODE_OPTIONS') env[key] = value;
   }
-  return { ...env, TMP: temp, TEMP: temp, TMPDIR: temp };
+  return { ...env, NO_COLOR: '1', FORCE_COLOR: '0', TMP: temp, TEMP: temp, TMPDIR: temp };
 }
 
 describe('temp folders of the main-process suites', () => {
