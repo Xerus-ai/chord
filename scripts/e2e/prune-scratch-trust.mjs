@@ -82,8 +82,13 @@ function isGoneScratchFolder(key, tempRoot) {
   return resolve(folder).toLowerCase().startsWith(root) && !existsSync(folder);
 }
 
+/**
+ * `before` is the parse of the file as read, used for nothing else, so it becomes the expected
+ * config in place: smol-toml builds null-prototype tables, which a structuredClone copy would not
+ * keep, and isDeepStrictEqual compares prototypes.
+ */
 function assertOnlyProjectsRemoved(before, after, removed, configPath) {
-  const expected = structuredClone(before);
+  const expected = before;
   for (const key of removed) delete expected.projects[key];
   if (!isDeepStrictEqual(after, expected)) {
     throw new Error(

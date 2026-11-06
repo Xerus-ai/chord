@@ -12,7 +12,9 @@ import { describe, expect, it } from 'vitest';
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const lock = readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8').replace(/\r/g, '');
-const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
+  scripts: Record<string, string>;
+};
 
 const ADVISORIES: Array<[name: string, range: string, advisory: string]> = [
   ['dompurify', '<=3.4.16', 'GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr'],
