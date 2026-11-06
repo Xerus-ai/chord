@@ -14,6 +14,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The token reads the repository and nothing else (devstation-i3y5.3): steps run `pnpm install`
+# lifecycle scripts. Checkout and the leak scan's full-history fetch read contents; the pnpm cache
+# and the artifact upload use the runner's own token, not this one. A job that needs more names
+# its own narrower block.
+permissions:
+  contents: read
+
 env:
   # `scripts/postinstall.ts` skips the Electron rebuild under CI, so the native
   # modules keep the Node prebuilds pnpm installs — the ABI vitest runs under.
