@@ -72,15 +72,16 @@ describe('LifecycleScriptService', () => {
   });
 
   it('returns once a script that fails exits, too', async () => {
-    const { service } = createService();
+    const { service, dir } = createService();
+    // The script's work is done before it fails: a service that returned before
+    // the exit would leave ran.txt unwritten when the wait resolved.
+    const script = `node -e "require('fs').writeFileSync('ran.txt', 'x'); process.exit(4)"`;
 
-    await within(
-      service.runLifecycleScript(
-        { type: 'teardown', script: 'node -e "process.exit(4)"' },
-        { waitForExit: true }
-      ),
-      8_000
-    );
+    await expect(
+      within(service.runLifecycleScript({ type: 'teardown', script }, { waitForExit: true }), 8_000)
+    ).resolves.toBeUndefined();
+
+    expect(fs.readFileSync(path.join(dir, 'ran.txt'), 'utf8')).toBe('x');
     await service.dispose();
   });
 });
