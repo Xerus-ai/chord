@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { LocalTerminalProvider } from '@main/core/terminals/impl/local-terminal-provider';
 import { LifecycleScriptService } from './workspace-lifecycle-service';
@@ -19,17 +19,12 @@ vi.mock('@main/lib/events', () => ({
   events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
 }));
 
-const dirs: string[] = [];
-
-afterEach(async () => {
-  for (const dir of dirs.splice(0)) {
-    await vi.waitFor(() => fs.rmSync(dir, { recursive: true, force: true }), { timeout: 10_000 });
-  }
-});
-
+/** A service on a fresh workspace folder, removed when the test that made it finishes. */
 function createService(): { service: LifecycleScriptService; dir: string } {
   const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'lifecycle-')));
-  dirs.push(dir);
+  onTestFinished(() =>
+    vi.waitFor(() => fs.rmSync(dir, { recursive: true, force: true }), { timeout: 10_000 })
+  );
   const terminals = new LocalTerminalProvider({
     projectId: 'project-1',
     scopeId: 'lane-1',
