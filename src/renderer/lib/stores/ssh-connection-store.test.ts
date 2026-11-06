@@ -1,58 +1,53 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { SshConnectionEvent } from '@shared/events/sshEvents';
-import { SshConnectionStore } from './ssh-connection-store';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { sshConnectionEventChannel } from '@shared/events/sshEvents';
+import type { ConnectionState } from '@shared/ssh';
+import { testMain } from '@renderer/lib/_testing/test-main';
 
-let sshEventHandler: ((event: SshConnectionEvent) => void) | null = null;
+/**
+ * The store over the renderer's real RPC client and event bridge (`lib/ipc.ts`),
+ * reaching a test main through the preload's `window.electronAPI` shape; the
+ * store is imported once the test main is installed, since `lib/ipc.ts` reads
+ * the bridge when it loads.
+ */
+const { SshConnectionStore } = await import('./ssh-connection-store');
 
-vi.mock('@renderer/lib/ipc', () => ({
-  events: {
-    on: vi.fn((_channel, handler: (event: SshConnectionEvent) => void) => {
-      sshEventHandler = handler;
-      return () => {};
-    }),
-  },
-  rpc: {
+/** What `ssh.getConnectionState` answers. */
+let states: Record<string, ConnectionState>;
+
+beforeEach(() => {
+  states = {};
+  testMain.reset();
+  testMain.serve({
     ssh: {
-      connect: vi.fn(async () => {}),
-      deleteConnection: vi.fn(async () => {}),
-      getConnections: vi.fn(async () => []),
-      getConnectionState: vi.fn(async () => ({})),
-      renameConnection: vi.fn(async () => {}),
-      saveConnection: vi.fn(async (config) => ({ ...config, id: 'ssh-1' })),
-      testConnection: vi.fn(async () => ({ success: true })),
+      getConnections: () => [],
+      getConnectionState: () => states,
     },
-  },
-}));
-
-const { rpc } = await import('@renderer/lib/ipc');
+  });
+});
 
 describe('SshConnectionStore', () => {
   it('notifies when an SSH connection becomes ready', () => {
-    const onConnectionReady = vi.fn();
-    const store = new SshConnectionStore({ onConnectionReady });
+    const ready: string[] = [];
+    const store = new SshConnectionStore({ onConnectionReady: (id) => ready.push(id) });
     store.start();
 
-    sshEventHandler?.({ type: 'connected', connectionId: 'ssh-1' });
-    sshEventHandler?.({ type: 'reconnected', connectionId: 'ssh-1' });
-    sshEventHandler?.({ type: 'disconnected', connectionId: 'ssh-1' });
+    for (const type of ['connected', 'reconnected', 'disconnected'] as const) {
+      testMain.send(sshConnectionEventChannel.name, { type, connectionId: 'ssh-1' });
+    }
 
-    expect(onConnectionReady).toHaveBeenCalledTimes(2);
-    expect(onConnectionReady).toHaveBeenNthCalledWith(1, 'ssh-1');
-    expect(onConnectionReady).toHaveBeenNthCalledWith(2, 'ssh-1');
+    expect(ready).toEqual(['ssh-1', 'ssh-1']);
   });
 
   it('notifies for initially connected SSH connections', async () => {
-    vi.mocked(rpc.ssh.getConnectionState).mockResolvedValueOnce({
-      'ssh-1': 'connected',
-      'ssh-2': 'disconnected',
-    });
-    const onConnectionReady = vi.fn();
-    const store = new SshConnectionStore({ onConnectionReady });
+    states = { 'ssh-1': 'connected', 'ssh-2': 'disconnected' };
+    const ready: string[] = [];
+    const store = new SshConnectionStore({ onConnectionReady: (id) => ready.push(id) });
 
     store.start();
     await store.connectionStatesResource.load();
 
-    expect(onConnectionReady).toHaveBeenCalledWith('ssh-1');
-    expect(onConnectionReady).not.toHaveBeenCalledWith('ssh-2');
+    expect(ready).toContain('ssh-1');
+    expect(ready).not.toContain('ssh-2');
+    expect(testMain.calls('ssh.getConnectionState').length).toBeGreaterThan(0);
   });
 });
