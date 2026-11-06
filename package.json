@@ -95,7 +95,7 @@
     "@chord/protocol": "workspace:*",
     "@hocuspocus/provider": "^4.0.0",
     "@linear/sdk": "^77.0.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@monaco-editor/react": "^4.7.0",
     "@octokit/auth-oauth-device": "^8.0.3",
     "@octokit/rest": "^22.0.1",
@@ -122,6 +122,7 @@
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
     "@tiptap/suggestion": "^3.22.5",
+    "@tiptap/y-tiptap": "^3.0.7",
     "@types/better-sqlite3": "^7.6.13",
     "@types/ssh2": "^1.15.5",
     "@workos-inc/node": "^9.2.0",
@@ -190,6 +191,16 @@
       "esbuild",
       "protobufjs",
       "ssh2"
-    ]
+    ],
+    "overrides": {
+      "dompurify@3": "^3.4.17",
+      "fast-uri@3": "^3.1.7",
+      "js-yaml@3": "^3.15.2",
+      "js-yaml@4": "^4.3.2",
+      "lodash@4": "^4.18.1",
+      "lodash-es@4": "^4.18.1",
+      "shell-quote@1": "^1.9.0",
+      "toml@<5.0.1": "^5.0.1"
+    }
   }
 }
