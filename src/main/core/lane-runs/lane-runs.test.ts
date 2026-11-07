@@ -11,14 +11,15 @@ import {
   commitTeamConfig,
   createLaneRepo,
   insertRepoAndItems,
-  isAlive,
   neverAsk,
   readLaneRow,
   removeLaneRepo,
   samePath,
   waitForPid,
+  waitForRunProcess,
   type LaneRepo,
 } from './_testing/lane-run-fixture';
+import { isRunning } from './_testing/run-process';
 import {
   readLaneRunState,
   releaseLaneRuns,
@@ -134,7 +135,7 @@ describe('lane runs', () => {
 
   it('stops a script with Ctrl+C first, so one that handles it exits gracefully', async () => {
     await startLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk);
-    const pid = await waitForPid(path.join(lanePath, 'serve.pid'));
+    const run = await waitForRunProcess(path.join(lanePath, 'serve.pid'));
 
     const t0 = Date.now();
     const stopped = await stopLaneRun(LANE_ID, 'web');
@@ -142,13 +143,13 @@ describe('lane runs', () => {
     expect(Date.now() - t0).toBeLessThan(9_000);
     expect(stopped.scripts.web.status).toBe('stopped');
     expect(fs.readFileSync(path.join(lanePath, 'graceful.txt'), 'utf8')).toBe('stopped on Ctrl+C');
-    expect(isAlive(pid)).toBe(false);
+    expect(await isRunning(run)).toBe(false);
     expect(scriptState('web')).toMatchObject({ status: 'stopped', url: null });
   });
 
   it('tree-kills a script that ignores Ctrl+C once the grace period is over', async () => {
     await startLaneRun({ laneId: LANE_ID, scriptId: 'stubborn' }, neverAsk);
-    const pid = await waitForPid(path.join(lanePath, 'stubborn.pid'));
+    const run = await waitForRunProcess(path.join(lanePath, 'stubborn.pid'));
 
     const t0 = Date.now();
     const stopping = stopLaneRun(LANE_ID, 'stubborn');
@@ -158,32 +159,32 @@ describe('lane runs', () => {
     // It was asked first (Ctrl+C reached it), and killed only after waiting.
     expect(fs.existsSync(path.join(lanePath, 'sigint-seen.txt'))).toBe(true);
     expect(Date.now() - t0).toBeGreaterThanOrEqual(9_500);
-    expect(isAlive(pid)).toBe(false);
+    expect(await isRunning(run)).toBe(false);
     expect(scriptState('stubborn')?.status).toBe('stopped');
   });
 
   it('refuses to start a script that is already running', async () => {
     await startLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk);
-    const pid = await waitForPid(path.join(lanePath, 'serve.pid'));
+    const run = await waitForRunProcess(path.join(lanePath, 'serve.pid'));
 
     expect(await startLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk)).toEqual({
       success: false,
       error: { type: 'already_running' },
     });
-    expect(isAlive(pid)).toBe(true);
+    expect(await isRunning(run)).toBe(true);
   });
 
   it('restarts a running script: the old process goes, a new one runs', async () => {
     await startLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk);
-    const first = await waitForPid(path.join(lanePath, 'serve.pid'));
+    const first = await waitForRunProcess(path.join(lanePath, 'serve.pid'));
     fs.rmSync(path.join(lanePath, 'serve.pid'));
 
     const restarted = await restartLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk);
 
     expect(restarted.success).toBe(true);
     const second = await waitForPid(path.join(lanePath, 'serve.pid'));
-    expect(second).not.toBe(first);
-    expect(isAlive(first)).toBe(false);
+    expect(second).not.toBe(first.pid);
+    expect(await isRunning(first)).toBe(false);
     expect(scriptState('web')?.status).toBe('running');
   });
 
@@ -259,14 +260,14 @@ describe('lane runs', () => {
     await approveLaneAsIs(SECOND_LANE_ID);
     await startLaneRun({ laneId: LANE_ID, scriptId: 'web' }, neverAsk);
     await startLaneRun({ laneId: SECOND_LANE_ID, scriptId: 'web' }, neverAsk);
-    const pids = [
-      await waitForPid(path.join(lanePath, 'serve.pid')),
-      await waitForPid(path.join(secondPath, 'serve.pid')),
+    const runs = [
+      await waitForRunProcess(path.join(lanePath, 'serve.pid')),
+      await waitForRunProcess(path.join(secondPath, 'serve.pid')),
     ];
 
     await stopEveryLaneRun();
 
-    expect(pids.filter(isAlive)).toEqual([]);
+    expect(await Promise.all(runs.map(isRunning))).toEqual([false, false]);
     expect(scriptState('web')?.status).toBe('stopped');
     expect(scriptState('web', SECOND_LANE_ID)?.status).toBe('stopped');
   });

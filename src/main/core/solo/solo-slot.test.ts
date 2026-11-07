@@ -6,13 +6,13 @@ import {
   answer,
   commitTeamConfig,
   insertRepoAndItems,
-  isAlive,
   neverAsk,
   removeLaneRepo,
   REPO_ID,
   samePath,
   type LaneRepo,
 } from '@main/core/lane-runs/_testing/lane-run-fixture';
+import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
 import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
 import { db } from '@main/db/client';
 import { repos, workItems } from '@main/db/schema-work-items';
@@ -91,7 +91,8 @@ describe('the Solo slot', () => {
     if (!result.success || result.data.status !== 'holding') {
       throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
     }
-    return waitForRunMark(root, laneId);
+    const mark = await waitForRunMark(root, laneId);
+    return { ...mark, process: await runProcessOf(mark.pid) };
   }
 
   it("refuses not_solo_mode when the repository's run mode is perWorktree, touching nothing", async () => {
@@ -183,7 +184,7 @@ describe('the Solo slot', () => {
       },
     });
     expect(sawCtrlC(root, A)).toBe(true);
-    expect(isAlive(first.pid)).toBe(false);
+    expect(await isRunning(first.process)).toBe(false);
     expect(readLaneRunState(A).scripts.app?.status).toBe('stopped');
     const second = await waitForRunMark(root, B);
     expect(samePath(second.cwd, root)).toBe(true);
@@ -229,7 +230,7 @@ describe('the Solo slot', () => {
       success: false,
       error: { type: 'root_changed', files: ['scratch.md'] },
     });
-    expect(isAlive(mark.pid)).toBe(true);
+    expect(await isRunning(mark.process)).toBe(true);
     expect(readLaneRunState(A).scripts.app?.status).toBe('running');
     expect((await readSoloState(root)).status).toBe('held');
     expect(await readSoloView(REPO_ID)).toMatchObject({
