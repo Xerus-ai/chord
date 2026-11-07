@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   git,
   insertRepoAndItems,
-  isAlive,
   neverAsk,
   removeLaneRepo,
   REPO_ID,
   samePath,
   type LaneRepo,
 } from '@main/core/lane-runs/_testing/lane-run-fixture';
+import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
 import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
 import { db } from '@main/db/client';
 import { repos, workItems } from '@main/db/schema-work-items';
@@ -74,7 +74,8 @@ describe('the Solo slot while held', () => {
     if (!result.success || result.data.status !== 'holding') {
       throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
     }
-    return waitForRunMark(root, laneId);
+    const mark = await waitForRunMark(root, laneId);
+    return { ...mark, process: await runProcessOf(mark.pid) };
   }
 
   it("Sync from lane applies the holder's new commit and edits to the root without stopping its runs", async () => {
@@ -94,7 +95,7 @@ describe('the Solo slot while held', () => {
     expect(fs.readFileSync(path.join(root, 'a.md'), 'utf8')).toMatch(
       /^edited, not committed\r?\n$/
     );
-    expect(isAlive(mark.pid)).toBe(true);
+    expect(await isRunning(mark.process)).toBe(true);
     expect(readLaneRunState(A).scripts.app?.status).toBe('running');
   });
 
@@ -157,7 +158,7 @@ describe('the Solo slot while held', () => {
 
     expect(restarted.success).toBe(true);
     const second = await waitForRunMark(root, A, first.pid);
-    expect(isAlive(first.pid)).toBe(false);
+    expect(await isRunning(first.process)).toBe(false);
     expect(samePath(second.cwd, root)).toBe(true);
     expect(second.solo).toBe('1');
     expect(fs.existsSync(path.join(lanePaths[A], `solo-${A}.txt`))).toBe(false);
