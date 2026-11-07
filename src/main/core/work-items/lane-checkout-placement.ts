@@ -178,29 +178,35 @@ export async function placeLaneCheckout(args: {
 }
 
 /**
- * Undoes this create's companion half after its lane checkout failed, so the
- * failure leaves nothing. The refusal is returned with what removing failed on.
+ * Undoes this create's companion half (and the companion branch it made), so
+ * a failed lane checkout leaves nothing. Throws when the companion refuses.
  */
+export async function undoPlacement(placement: LanePlacement): Promise<void> {
+  if (!placement.companion || !placement.removeOnFailure) return;
+  const { companion } = placement;
+  const removed = await removeCompanionCheckout({
+    companion: { path: companion.repoPath, appFolder: companion.appFolder },
+    companionPath: companion.companionPath,
+  });
+  if (!removed.success) {
+    throw new Error(
+      `The companion checkout at ${companion.companionPath} was kept: ${removed.error.message}`
+    );
+  }
+  if (companion.branchCreated) {
+    await deleteCompanionBranch(companion.repoPath, companion.companionBranch);
+  }
+}
+
+/** A lane checkout refused: the placement is undone, and the refusal names an undo that failed. */
 export async function releaseFailedPlacement(
   placement: LanePlacement,
   refusal: LaneProvisionError
 ): Promise<LaneProvisionError> {
-  if (!placement.companion || !placement.removeOnFailure) return refusal;
-  const removed = await removeCompanionCheckout({
-    companion: { path: placement.companion.repoPath, appFolder: placement.companion.appFolder },
-    companionPath: placement.companion.companionPath,
-  });
-  if (removed.success) {
-    if (placement.companion.branchCreated) {
-      await deleteCompanionBranch(
-        placement.companion.repoPath,
-        placement.companion.companionBranch
-      );
-    }
+  try {
+    await undoPlacement(placement);
     return refusal;
+  } catch (error) {
+    return { type: 'worktree_failed', message: `${refusal.message} ${String(error)}` };
   }
-  return {
-    type: 'worktree_failed',
-    message: `${refusal.message} The companion checkout at ${placement.companion.companionPath} was kept: ${removed.error.message}`,
-  };
 }

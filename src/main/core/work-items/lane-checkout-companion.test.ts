@@ -158,4 +158,23 @@ describe('provisionLaneCheckout with a companion repository', () => {
     expect(result).toMatchObject({ success: false, error: { type: 'branch_checked_out' } });
     expect(await companionBranches()).toBe('');
   });
+
+  // verify-run P1 (a3687d8): a lane checkout that throws (here `git branch --track` on a locked
+  // ref) undoes the companion half and its branch as a refusal does, and the error is rethrown.
+  it('undoes the companion half when the lane checkout throws, and rethrows the failure', async () => {
+    await git(['push', 'origin', 'main:refs/heads/feat/remote'], path.join(root, 'pusher'));
+    fs.mkdirSync(path.join(repoDir, '.git', 'refs', 'heads', 'feat'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, '.git', 'refs', 'heads', 'feat', 'remote.lock'), '');
+
+    await expect(
+      provisionLaneCheckout({
+        repoPath: repoDir,
+        poolPath: pool,
+        request: { kind: 'existing', branchName: 'feat/remote' },
+        companion,
+      })
+    ).rejects.toThrow(/feat\/remote/);
+    expect(fs.existsSync(pool) ? fs.readdirSync(pool) : []).toEqual([]);
+    expect(await companionBranches()).toBe('');
+  });
 });

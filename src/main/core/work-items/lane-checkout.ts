@@ -18,9 +18,10 @@ import {
   findInterruptedPlacement,
   placeLaneCheckout,
   releaseFailedPlacement,
+  undoPlacement,
   type LanePlacement,
 } from './lane-checkout-placement';
-
+import { rethrowAfterRollback } from './rethrow-after-rollback';
 
 /**
  * The git half of creating a lane: resolve where it forks from, create the
@@ -101,8 +102,25 @@ async function revParse(repoPath: string, ref: string): Promise<string> {
   return stdout.trim();
 }
 
-/** Creates the lane's branch checkout at the placement's folder; undoes the placement on failure. */
+/**
+ * Creates the lane's branch checkout at the placement's folder; undoes the
+ * placement when it is refused, or throws (a host, folder or git failure).
+ */
 async function checkoutAt(
+  args: { repoPath: string; poolPath: string },
+  placement: LanePlacement,
+  checkout:
+    | { kind: 'existing'; branchName: string }
+    | { kind: 'new'; branchName: string; startPoint: string }
+): Promise<Result<string, LaneProvisionError>> {
+  try {
+    return await checkoutAtPlacement(args, placement, checkout);
+  } catch (error) {
+    return rethrowAfterRollback(error, () => undoPlacement(placement));
+  }
+}
+
+async function checkoutAtPlacement(
   args: { repoPath: string; poolPath: string },
   placement: LanePlacement,
   checkout:
