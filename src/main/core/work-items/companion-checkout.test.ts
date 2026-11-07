@@ -153,6 +153,26 @@ describe('companion checkouts', () => {
     expect(fs.readFileSync(env, 'utf8')).toBe('TOKEN=local\n');
   });
 
+  // Review round 2: trimming the porcelain output cut the leading space of ' M x', so the first
+  // path lost its first character and a one-character name vanished from the check.
+  it('keeps a companion checkout whose only change is a one-character tracked file', async () => {
+    fs.writeFileSync(path.join(companion.path, 'x'), 'one\n');
+    await git(['add', 'x'], companion.path);
+    await git(['commit', '-m', 'x'], companion.path);
+    const made = await provision();
+    if (!made.success) throw new Error(made.error.message);
+    fs.writeFileSync(path.join(made.data.companionPath, 'x'), 'two\n');
+    const removed = await removeCompanionCheckout({
+      companion,
+      companionPath: made.data.companionPath,
+    });
+    expect(removed).toMatchObject({
+      success: false,
+      error: { type: 'companion_has_changes', message: expect.stringContaining('(x)') },
+    });
+    expect(fs.readFileSync(path.join(made.data.companionPath, 'x'), 'utf8')).toBe('two\n');
+  });
+
   it('the setting takes an absolute companion path and a folder inside it', () => {
     const abs = path.resolve('companion');
     expect(companionRepoSchema.safeParse({ path: abs, appFolder: 'app' }).success).toBe(true);

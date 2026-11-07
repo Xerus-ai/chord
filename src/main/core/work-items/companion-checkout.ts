@@ -66,6 +66,29 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return stdout.trim();
 }
 
+/**
+ * Every path `git status` reports in a checkout, ignored ones included. Read as `-z` and
+ * untrimmed: each entry is `XY <path>`, where X can be a space, so trimming the output cut the
+ * first path's first character; a rename or copy carries its source path as the next entry.
+ */
+async function statusPaths(cwd: string): Promise<string[]> {
+  const { stdout } = await new LocalExecutionContext({ root: cwd }).exec(GIT_EXECUTABLE, [
+    'status',
+    '--porcelain=v1',
+    '-z',
+    '--ignored',
+  ]);
+  const entries = stdout.split('\0');
+  const paths: string[] = [];
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    if (!entry) continue;
+    paths.push(entry.slice(3));
+    if (entry[0] === 'R' || entry[0] === 'C') i += 1;
+  }
+  return paths;
+}
+
 /** The exit code of a git command that answers yes (0) or no (1); anything else throws. */
 async function gitAnswers(cwd: string, args: string[]): Promise<boolean> {
   try {
@@ -184,10 +207,9 @@ export async function removeCompanionCheckout(args: {
     // --ignored as well: `git worktree remove` deletes ignored files with the folder, and a
     // companion's ignored files (local state, .env) are the user's, not the lane's.
     const appPrefix = `${args.companion.appFolder.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
-    const leftovers = (await git(args.companionPath, ['status', '--porcelain', '--ignored']))
-      .split('\n')
-      .map((line) => line.slice(3))
-      .filter((file) => file && !file.startsWith(appPrefix));
+    const leftovers = (await statusPaths(args.companionPath)).filter(
+      (file) => !file.startsWith(appPrefix)
+    );
     if (leftovers.length > 0) {
       return err({
         type: 'companion_has_changes',
