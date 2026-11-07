@@ -12,11 +12,12 @@
  *
  *   node scripts/perf/bench-rpc.mjs <appDir> [label] [repeat=7]
  *
- * Results append to .e2e-runs/perf/rpc.jsonl.
+ * Results append to <e2e out>/perf/rpc.jsonl.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { launchSeededApp, ROOT } from '../e2e/seeded-app.mjs';
+import { E2E_PERF_DIR } from '../e2e/lib/experience/run-record.mjs';
+import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
 const label = process.argv[3] ?? appDir;
@@ -68,7 +69,7 @@ try {
     );
   }
   console.log('RESULT', JSON.stringify(summary));
-  const outDir = join(ROOT, '.e2e-runs', 'perf');
+  const outDir = E2E_PERF_DIR;
   mkdirSync(outDir, { recursive: true });
   appendFileSync(join(outDir, 'rpc.jsonl'), JSON.stringify(summary) + '\n');
 } finally {

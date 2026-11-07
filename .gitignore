@@ -87,15 +87,18 @@ Thumbs.db
 
 src/main/appConfig.json
 
-# Built e2e apps: `.e2e-app` and the named ones (`node scripts/e2e/build-e2e-app.mjs .e2e-app-history`).
+# Built e2e apps: `.e2e-app` and the named ones (`node scripts/e2e/lib/build-e2e-app.mjs .e2e-app-base`).
+# They stay in the repo: Electron resolves the build's node_modules from its folder upward.
 .e2e-app*/
 
-# e2e run records and their user-perspective reviews (scripts/e2e/experience/run-record.mjs)
+# Every e2e run's output (records, reviews, screenshots, videos, perf results) when
+# CHORD_E2E_OUT_DIR is unset (scripts/e2e/lib/experience/run-record.mjs).
+.e2e-out/
+
+# The e2e output folders of the earlier layout, kept ignored until they are cleared.
 .e2e-runs/
 
-# Screenshots from every run: e2e suites (screenshots/e2e), design-parity
-# scripts, the smoke script and failing vitest browser tests. Regenerated on
-# each run.
+# Failing vitest browser tests' screenshots (screenshots/vitest), regenerated on each run.
 /screenshots/
 
 # Vitest browser run attachments

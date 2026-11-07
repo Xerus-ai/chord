@@ -118,7 +118,7 @@ export async function buildArtifactRuntime(outDir = ARTIFACT_RUNTIME_OUT_DIR) {
 /** @returns {import('vite').Plugin} */
 export function artifactRuntimePlugin() {
   // Beside the main bundle, so `electron-vite build --outDir <dir>` puts the
-  // runtime in `<dir>/artifact-runtime` (scripts/e2e/build-e2e-app.mjs).
+  // runtime in `<dir>/artifact-runtime` (scripts/e2e/lib/build-e2e-app.mjs).
   let outDir = ARTIFACT_RUNTIME_OUT_DIR;
   return {
     name: 'chord-artifact-runtime',

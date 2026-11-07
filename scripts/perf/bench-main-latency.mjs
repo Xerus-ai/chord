@@ -9,11 +9,12 @@
  *
  *   node scripts/perf/bench-main-latency.mjs <appDir> [runs=2] [label] [seconds=24]
  *
- * Results append to .e2e-runs/perf/main-latency.jsonl.
+ * Results append to <e2e out>/perf/main-latency.jsonl.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { launchSeededApp, ROOT } from '../e2e/seeded-app.mjs';
+import { E2E_PERF_DIR } from '../e2e/lib/experience/run-record.mjs';
+import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
 const runs = Number(process.argv[3] ?? 2);
@@ -86,6 +87,6 @@ const summary = { label, runs, seconds, at: new Date().toISOString() };
 for (const key of ['p50', 'p95', 'max', 'over50'])
   summary[key] = median(results.map((r) => r[key]));
 console.log('MEDIAN', JSON.stringify(summary));
-const outDir = join(ROOT, '.e2e-runs', 'perf');
+const outDir = E2E_PERF_DIR;
 mkdirSync(outDir, { recursive: true });
 appendFileSync(join(outDir, 'main-latency.jsonl'), JSON.stringify({ ...summary, results }) + '\n');

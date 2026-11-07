@@ -1,6 +1,6 @@
 /* global document, requestAnimationFrame -- evaluate callbacks run in the app window */
 /**
- * Cold-start benchmark for a built app (`node scripts/e2e/build-e2e-app.mjs <dir>`).
+ * Cold-start benchmark for a built app (`node scripts/e2e/lib/build-e2e-app.mjs <dir>`).
  * Launches it RUNS times under a seeded, signed-in profile, each time cold (a
  * fresh profile) and then warm (the same profile relaunched), and reports, per
  * launch and as medians per kind, milliseconds from main-process start to:
@@ -12,11 +12,12 @@
  *
  *   node scripts/perf/bench-startup.mjs <appDir> [runs=5] [label]
  *
- * Results append to .e2e-runs/perf/startup.jsonl so before/after runs compare.
+ * Results append to <e2e out>/perf/startup.jsonl so before/after runs compare.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { launchSeededApp, ROOT } from '../e2e/seeded-app.mjs';
+import { E2E_PERF_DIR } from '../e2e/lib/experience/run-record.mjs';
+import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
 const runs = Number(process.argv[3] ?? 5);
@@ -140,6 +141,6 @@ for (const kind of ['cold', 'warm']) {
   }
 }
 console.log('MEDIAN', JSON.stringify(summary));
-const outDir = join(ROOT, '.e2e-runs', 'perf');
+const outDir = E2E_PERF_DIR;
 mkdirSync(outDir, { recursive: true });
 appendFileSync(join(outDir, 'startup.jsonl'), JSON.stringify({ ...summary, results }) + '\n');

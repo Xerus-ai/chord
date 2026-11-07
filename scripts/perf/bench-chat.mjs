@@ -9,11 +9,12 @@
  *
  *   node scripts/perf/bench-chat.mjs <appDir> [runs=3] [label] [workItemName=raghav] [otherName="test work item"]
  *
- * Results append to .e2e-runs/perf/chat.jsonl.
+ * Results append to <e2e out>/perf/chat.jsonl.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { launchSeededApp, ROOT } from '../e2e/seeded-app.mjs';
+import { E2E_PERF_DIR } from '../e2e/lib/experience/run-record.mjs';
+import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
 const runs = Number(process.argv[3] ?? 3);
@@ -173,7 +174,7 @@ async function measureOnce(i) {
     await selectItem(page, itemName);
     await page.waitForTimeout(1500);
     const open = await openLargestSession(page).catch(async (error) => {
-      const shot = join(ROOT, '.e2e-runs', 'perf', `chat-open-failed-${Date.now()}.png`);
+      const shot = join(E2E_PERF_DIR, `chat-open-failed-${Date.now()}.png`);
       await page.screenshot({ path: shot });
       throw new Error(`${error.message} (screenshot ${shot})`);
     });
@@ -188,7 +189,7 @@ async function measureOnce(i) {
     );
     await page.waitForTimeout(1500);
     const reopen = await reopenItem(page, itemName).catch(async (error) => {
-      const shot = join(ROOT, '.e2e-runs', 'perf', `chat-reopen-failed-${Date.now()}.png`);
+      const shot = join(E2E_PERF_DIR, `chat-reopen-failed-${Date.now()}.png`);
       await page.screenshot({ path: shot });
       throw new Error(`${error.message} (screenshot ${shot})`);
     });
@@ -207,6 +208,6 @@ for (const key of ['open', 'reopen', 'toOldest', 'p50', 'p95', 'max', 'over50', 
   summary[key] = median(results.map((r) => r[key]));
 }
 console.log('MEDIAN', JSON.stringify(summary));
-const outDir = join(ROOT, '.e2e-runs', 'perf');
+const outDir = E2E_PERF_DIR;
 mkdirSync(outDir, { recursive: true });
 appendFileSync(join(outDir, 'chat.jsonl'), JSON.stringify({ ...summary, results }) + '\n');
