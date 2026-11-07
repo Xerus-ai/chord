@@ -31,10 +31,7 @@ try {
   });
   const { profile } = await cdp.send('Profiler.stop');
   mkdirSync(E2E_PERF_DIR, { recursive: true });
-  writeFileSync(
-    join(E2E_PERF_DIR, 'renderer-boot.cpuprofile'),
-    JSON.stringify(profile)
-  );
+  writeFileSync(join(E2E_PERF_DIR, 'renderer-boot.cpuprofile'), JSON.stringify(profile));
   const byId = new Map(profile.nodes.map((n) => [n.id, n]));
   const self = new Map();
   const dt = profile.timeDeltas;
