@@ -134,6 +134,25 @@ describe('companion checkouts', () => {
     );
   });
 
+  // Review P3: `git worktree remove` deletes ignored files, which plain `status --porcelain` hides.
+  it('keeps a companion checkout that holds ignored files', async () => {
+    fs.appendFileSync(path.join(companion.path, '.git', 'info', 'exclude'), '.env\n');
+    const made = await provision();
+    if (!made.success) throw new Error(made.error.message);
+    const env = path.join(made.data.companionPath, '.env');
+    fs.writeFileSync(env, 'TOKEN=local\n');
+    expect(await git(['status', '--porcelain'], made.data.companionPath)).toBe('');
+    const removed = await removeCompanionCheckout({
+      companion,
+      companionPath: made.data.companionPath,
+    });
+    expect(removed).toMatchObject({
+      success: false,
+      error: { type: 'companion_has_changes', message: expect.stringContaining('.env') },
+    });
+    expect(fs.readFileSync(env, 'utf8')).toBe('TOKEN=local\n');
+  });
+
   it('the setting takes an absolute companion path and a folder inside it', () => {
     const abs = path.resolve('companion');
     expect(companionRepoSchema.safeParse({ path: abs, appFolder: 'app' }).success).toBe(true);

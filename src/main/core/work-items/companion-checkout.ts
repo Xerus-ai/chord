@@ -181,12 +181,20 @@ export async function removeCompanionCheckout(args: {
     });
   }
   try {
-    const changes = await git(args.companionPath, ['status', '--porcelain']);
-    if (changes) {
+    // --ignored as well: `git worktree remove` deletes ignored files with the folder, and a
+    // companion's ignored files (local state, .env) are the user's, not the lane's.
+    const appPrefix = `${args.companion.appFolder.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
+    const leftovers = (await git(args.companionPath, ['status', '--porcelain', '--ignored']))
+      .split('\n')
+      .map((line) => line.slice(3))
+      .filter((file) => file && !file.startsWith(appPrefix));
+    if (leftovers.length > 0) {
       return err({
         type: 'companion_has_changes',
         path: args.companionPath,
-        message: `${args.companionPath} has changes nothing else holds; commit or discard them first.`,
+        message: `${args.companionPath} holds changes or ignored files nothing else keeps (${leftovers
+          .slice(0, 3)
+          .join(', ')}); move, commit or discard them first.`,
       });
     }
     await git(args.companion.path, ['worktree', 'remove', args.companionPath]);
