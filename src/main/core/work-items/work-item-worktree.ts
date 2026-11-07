@@ -61,8 +61,8 @@ export function createWorkItemTrackingBranch(args: {
 /**
  * Acquiring the git checkout a lane runs in, from a `repos` row and this
  * machine's settings: the worktree root (Settings › General), the repo's
- * just-me base branch, and GitHub auth for the fetch. The git work itself is
- * `lane-checkout.ts`.
+ * just-me base branch and companion repository, and GitHub auth for the
+ * fetch. The git work itself is `lane-checkout.ts`.
  *
  * Checkouts live at `<pool>/<slug>`, the pool being the repository's own
  * folder or `<worktreeRoot>/<repo>` (`lane-pool-path.ts`).
@@ -95,6 +95,7 @@ export async function provisionWorkItemWorktree(args: {
     repoPath: args.repoPath,
     poolPath,
     request,
+    companion: justMe.companionRepo,
     networkContext: networkContextFor(args.repoPath),
     allowLocalCopy: args.allowLocalCopy,
     resumeInterrupted: args.resumeInterrupted,
@@ -105,6 +106,7 @@ export async function provisionWorkItemWorktree(args: {
       worktreePath: result.data.worktreePath,
       targetRef: result.data.targetRef,
       forkSource: result.data.forkSource,
+      companionPath: result.data.companionPath,
     });
     if (justMe.keepLocalBaseUpToDate && result.data.forkSource === 'fetched') {
       // The lane exists by now: a failure to move the user's own branch is

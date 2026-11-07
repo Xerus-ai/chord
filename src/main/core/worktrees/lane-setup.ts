@@ -102,6 +102,7 @@ async function runOnce(laneId: string, ask: AskScriptApproval): Promise<LaneSetu
           repoPath: sourcePath,
           ref: targetRef,
           remoteUrl: lane.remoteUrl,
+          claudeSource: lane.claudeSource,
           bundle: lane.bundle,
         },
         ask

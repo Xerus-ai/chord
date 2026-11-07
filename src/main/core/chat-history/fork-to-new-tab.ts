@@ -1,5 +1,5 @@
 import { ok, type Result } from '@shared/result';
-import { resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
+import { laneSessionCwd, resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
 import { log } from '@main/lib/logger';
 import { createForkedChat } from './create-forked-chat';
 import { forkConversationAtTurn } from './fork-conversation';
@@ -26,14 +26,14 @@ export async function forkToNewTab(args: {
   const { session } = chatTurn.data;
   const lane = checkLanePresent(resolveSessionWorktreeRow(session.id));
   if (!lane.success) return lane;
-  const point = resolveHistoryPoint(chatTurn.data, lane.data.path);
+  const point = resolveHistoryPoint(chatTurn.data, laneSessionCwd(lane.data));
   if (!point.success) return point;
 
   const fork = await forkConversationAtTurn(point.data);
   const sessionId = await createForkedChat({
     chatTurn: chatTurn.data,
     fork,
-    lane: { id: lane.data.id, path: point.data.cwd },
+    lane: { id: lane.data.id, path: lane.data.path, cwd: point.data.cwd },
   });
   log.info('[chat-history] forked to new tab', {
     workItemId: args.workItemId,

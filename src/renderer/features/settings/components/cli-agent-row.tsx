@@ -85,7 +85,7 @@ function SettingsButton({ agent, onClick }: { agent: CliAgentStatus; onClick: ()
 /**
  * One agent in Settings › Agents & models. The row is a group named after the
  * agent and carries its id (`data-agent-id`), so its version and Update button
- * can be found per agent (scripts/e2e/agent-updates.mjs).
+ * can be found per agent (scripts/e2e/suites/agent-updates.mjs).
  */
 export function AgentRow({
   agent,

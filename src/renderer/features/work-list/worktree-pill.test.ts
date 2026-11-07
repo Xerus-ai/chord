@@ -13,6 +13,7 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
     setupStatus: null,
     forkSource: null,
     checkoutOrigin: 'chord',
+    companionPath: null,
     isPrimary: true,
     title: null,
     createdAt: 0,

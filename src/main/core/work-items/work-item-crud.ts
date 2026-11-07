@@ -46,7 +46,11 @@ import type {
 } from './work-item-crud-types';
 import { runWorkItemProvisioning } from './work-item-provisioning';
 import { createWorkItemTrackingBranch, preflightWorkItemLane } from './work-item-worktree';
-import { buildWorkItemBranchName, removeLaneCheckout } from './work-item-worktree-git';
+import {
+  buildWorkItemBranchName,
+  checkLanesRemovable,
+  removeLaneCheckout,
+} from './work-item-worktree-git';
 
 export type CreateWorkItemError =
   | { type: 'no_repo'; message: string }
@@ -314,18 +318,22 @@ export async function deleteWorkItem(id: string): Promise<Result<void, DeleteWor
   const [row] = await db.select().from(workItems).where(eq(workItems.id, id)).limit(1);
 
   if (row) {
+    // No lane's companion half may hold what a removal would lose: checked first.
+    const worktreeRows = await db
+      .select()
+      .from(workItemWorktrees)
+      .where(eq(workItemWorktrees.workItemId, id));
+    const removable = await checkLanesRemovable(worktreeRows);
+    if (!removable.success) return removable;
     const solo = await releaseWorkItemSoloForRemoval(id);
     if (!solo.success) return solo;
     try {
       if (await repoIsOnDisk(row.repoPath)) {
         await deleteWorkItemCheckpoints(id, row.repoPath);
-        const laneIds = db
-          .select({ id: workItemWorktrees.id })
-          .from(workItemWorktrees)
-          .where(eq(workItemWorktrees.workItemId, id))
-          .all()
-          .map((lane) => lane.id);
-        await releaseArchiveRefs(row.repoPath, laneIds);
+        await releaseArchiveRefs(
+          row.repoPath,
+          worktreeRows.map((lane) => lane.id)
+        );
       } else {
         log.warn('[work-items] repo gone from disk; deleting without releasing checkpoint refs', {
           workItemId: id,
@@ -355,10 +363,6 @@ export async function deleteWorkItem(id: string): Promise<Result<void, DeleteWor
     // being removed on Windows, and the folder would outlive the item.
     await stopWorkItemSessions(id);
 
-    const worktreeRows = await db
-      .select()
-      .from(workItemWorktrees)
-      .where(eq(workItemWorktrees.workItemId, id));
     const nonPrimaryFirst = [...worktreeRows].sort((a, b) => a.isPrimary - b.isPrimary);
     // A lane whose checkout was never created still holds the repository's
     // path (see createWorkItem). That folder is the user's, and it can itself

@@ -4,6 +4,7 @@ import { OpenInMenu } from '@renderer/lib/components/titlebar/open-in-menu';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
 import { useShowModal } from '@renderer/lib/modal/modal-provider';
 import { ClosedRailStateChip } from './closed-rail-chip';
+import { HeaderCompanionChip } from './header-companion-chip';
 import { HeaderLanePrChips } from './header-lane-pr-chips';
 import { useParticipants } from './use-participants';
 import { useWorkItemViewers } from './use-viewing-presence';
@@ -14,8 +15,9 @@ import { useWorkItemSource } from './work-item-source';
 /**
  * The owner's header: `WorkItemHeader` over this machine's item. The avatar
  * stack is the people it is shared with; Share works once the item can be
- * shared (sharing-availability.ts); Open in editor, every lane's PR chip and
- * the closed rail's state chip read the local checkout.
+ * shared (sharing-availability.ts); Open in editor, the focused lane's
+ * companion chip, every lane's PR chip and the closed rail's state chip read
+ * the local checkout.
  */
 export function ChatTopbar({
   title,
@@ -67,7 +69,12 @@ export function ChatTopbar({
         showShare({ workItemId, workItemName: title, artifactId: activeArtifactId ?? undefined })
       }
       railClosedChip={<ClosedRailStateChip workItemId={workItemId} onOpenRail={toggleRail} />}
-      lanePrChips={<HeaderLanePrChips workItemId={workItemId} />}
+      lanePrChips={
+        <>
+          <HeaderCompanionChip workItemId={workItemId} />
+          <HeaderLanePrChips workItemId={workItemId} />
+        </>
+      }
       openIn={<OpenInMenu path={repoPath} iconOnly />}
     />
   );

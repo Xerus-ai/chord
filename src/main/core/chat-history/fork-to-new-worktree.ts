@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { ok, type Result } from '@shared/result';
 import { deleteWorktree } from '@main/core/worktrees/delete-worktree';
 import { createWorktree, type CreateWorktreeError } from '@main/core/worktrees/service';
-import { resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
+import { laneSessionCwd, resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
 import { log } from '@main/lib/logger';
 import { createForkedChat } from './create-forked-chat';
 import { forkConversationAtTurn, type ForkedConversation } from './fork-conversation';
@@ -48,7 +48,10 @@ export async function forkToNewWorktree(args: {
   }
   // The source lane's path is where its conversation is kept, whether or not
   // its checkout is still there.
-  const point = resolveHistoryPoint(chatTurn.data, resolveSessionWorktreeRow(session.id).path);
+  const point = resolveHistoryPoint(
+    chatTurn.data,
+    laneSessionCwd(resolveSessionWorktreeRow(session.id))
+  );
   if (!point.success) return point;
 
   const created = await createWorktree({
@@ -61,10 +64,11 @@ export async function forkToNewWorktree(args: {
   }
   const lane = created.data;
   const lanePath = resolve(lane.path);
+  const laneCwd = laneSessionCwd(lane);
 
   let fork: ForkedConversation;
   try {
-    fork = await forkConversationAtTurn(point.data, { into: lanePath });
+    fork = await forkConversationAtTurn(point.data, { into: laneCwd });
   } catch (error) {
     const removed = await deleteWorktree(lane.id);
     if (!removed.success) {
@@ -78,7 +82,7 @@ export async function forkToNewWorktree(args: {
   const sessionId = await createForkedChat({
     chatTurn: chatTurn.data,
     fork,
-    lane: { id: lane.id, path: lanePath },
+    lane: { id: lane.id, path: lanePath, cwd: laneCwd },
     checkpointLane: { worktreeId: lane.id, branchName: lane.branchName },
   });
   log.info('[chat-history] forked to new worktree', {

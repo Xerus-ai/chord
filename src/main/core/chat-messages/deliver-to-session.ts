@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { AgentProviderId } from '@shared/agent-provider-registry';
 import { isPublishToolAvailable } from '@main/core/agent-artifact-tools/artifact-tool-availability';
@@ -14,7 +13,7 @@ import { prependPlatformContext } from '@main/core/artifacts/platform-instructio
 import type * as ActiveSessions from '@main/core/work-items/active-sessions';
 import type * as SessionService from '@main/core/work-items/session-service';
 import type * as SessionTaskEnv from '@main/core/work-items/session-task-env';
-import { resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
+import { laneSessionCwd, resolveSessionWorktreeRow } from '@main/core/worktrees/worktree-lookup';
 import { db } from '@main/db/client';
 import { agentSessions, type AgentSessionRow, type workItems } from '@main/db/schema-work-items';
 import { log } from '@main/lib/logger';
@@ -173,7 +172,7 @@ export async function deliverToTargetSession(
 
 /** A resumed row's cwd comes from ITS OWN worktree, never the work item's primary. */
 function resumableRowCwd(sessionId: string): string {
-  return resolve(resolveSessionWorktreeRow(sessionId).path);
+  return laneSessionCwd(resolveSessionWorktreeRow(sessionId));
 }
 
 /**

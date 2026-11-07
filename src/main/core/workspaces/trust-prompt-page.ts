@@ -32,6 +32,8 @@ export type TrustPromptTheme = 'dark' | 'light';
 export interface TrustPromptContent {
   repoPath: string;
   ref: string;
+  /** The companion worktree the Claude config comes from (its sessions start there); null for the checkout's. */
+  claudeSource: string | null;
   bundle: BundleContent;
   /** What was last approved with Always trust, to mark what changed; null if nothing was. */
   previous: BundleContent | null;
@@ -223,13 +225,18 @@ export function renderTrustPromptPage(
   const { claude } = args.bundle;
   // What Don't run does to a chat is what the chat's gate does — asked of it.
   const dropsGuidance = buildClaudeProjectGate({ claude, approved: false }).dropsProjectGuidance;
+  // The repository whose Claude config this is: a companion's, where the lane's chats start.
+  const claudeOwner =
+    args.claudeSource === null
+      ? "this repository's"
+      : `the companion repository's (${args.claudeSource})`;
   const claudeNote =
     Object.keys(claude).length === 0
       ? ''
       : `<p class="note">Running them also marks this checkout as trusted in Claude Code, so its hooks and MCP servers load. ${
           dropsGuidance
             ? escapeHtml(
-                "If you choose Don't run, chats here start without this repository's CLAUDE.md and Claude settings: its hooks, env and helper settings can't be separated from them. Your own Claude settings and hooks still apply."
+                `If you choose Don't run, chats here start without ${claudeOwner} CLAUDE.md and Claude settings: its hooks, env and helper settings can't be separated from them. Your own Claude settings and hooks still apply.`
               )
             : escapeHtml(
                 "Don't run keeps its hooks and MCP servers off; CLAUDE.md and other guidance still load."
@@ -249,7 +256,11 @@ ${PAGE_CSS}</style>
 <main>
 <h1>${escapeHtml(heading)}</h1>
 <p class="repo">${escapeHtml(args.repoPath)}</p>
-<p class="source">From <code>.chord.json</code> at <code>${escapeHtml(args.ref)}</code> and this checkout's Claude config. Only run code from authors you trust; the lane opens either way.</p>
+<p class="source">From <code>.chord.json</code> at <code>${escapeHtml(args.ref)}</code> and ${
+    args.claudeSource === null
+      ? "this checkout's Claude config"
+      : `the Claude config of the companion repository at <code>${escapeHtml(args.claudeSource)}</code>, where this lane's chats start`
+  }. Only run code from authors you trust; the lane opens either way.</p>
 ${list.map((item) => renderItem(item, compare)).join('\n')}
 ${claudeNote}
 </main>

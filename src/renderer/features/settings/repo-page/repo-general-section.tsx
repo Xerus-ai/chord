@@ -5,14 +5,19 @@ import { Button } from '@renderer/lib/ui/button';
 import { Switch } from '@renderer/lib/ui/switch';
 import { SettingRow } from '../components/SettingRow';
 import { LayerBadge, LayeredField } from './layered-field';
+import { RepoCompanionRow } from './repo-companion-row';
 import { RepoWorktreeSourcesRows } from './repo-worktree-sources-rows';
 import type { RepoSettingsData, useRepoSettings } from './use-repo-settings';
 
-type Writes = Pick<ReturnType<typeof useRepoSettings>, 'saveJustMe' | 'saveTeam'>;
+type Writes = Pick<
+  ReturnType<typeof useRepoSettings>,
+  'saveJustMe' | 'saveJustMeReporting' | 'saveTeam'
+>;
 
 /**
  * Repo › General: where lanes fork from, keeping the local base current, where
- * checkouts go, and which checkouts made outside Chord the sidebar lists.
+ * checkouts go and the companion they nest in, and which checkouts made
+ * outside Chord the sidebar lists.
  */
 export function RepoGeneralSection({ data, writes }: { data: RepoSettingsData; writes: Writes }) {
   const { config, justMe, repo } = data;
@@ -95,6 +100,13 @@ export function RepoGeneralSection({ data, writes }: { data: RepoSettingsData; w
             </Button>
           </>
         }
+      />
+
+      <RepoCompanionRow
+        repoAlias={repo.alias}
+        repoPath={repo.path}
+        companion={justMe.companionRepo}
+        save={writes.saveJustMeReporting}
       />
 
       <RepoWorktreeSourcesRows justMe={justMe} saveJustMe={writes.saveJustMe} />

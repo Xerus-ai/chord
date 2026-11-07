@@ -7,9 +7,22 @@ import { resumeShellTerminalSession } from '@main/core/agent-sessions/shell-term
 import { getActiveSessions } from '@main/core/work-items/active-sessions';
 import { startSession } from '@main/core/work-items/session-service';
 import { resolveSessionLaneEnv } from '@main/core/work-items/session-task-env';
-import { findWorktreeRow, getPrimaryWorktreeRow } from '@main/core/worktrees/worktree-lookup';
+import {
+  findWorktreeRow,
+  getPrimaryWorktreeRow,
+  laneSessionCwd,
+} from '@main/core/worktrees/worktree-lookup';
 import { db } from '@main/db/client';
 import { agentSessions, workItems } from '@main/db/schema-work-items';
+
+/**
+ * Where a session resumes: the cwd it recorded, else where its work item's
+ * primary lane starts sessions (`laneSessionCwd`: a companion lane's
+ * companion root, where its conversation is kept).
+ */
+export function resolveResumeCwd(row: { cwd: string | null; workItemId: string }): string {
+  return resolve(row.cwd ?? laneSessionCwd(getPrimaryWorktreeRow(row.workItemId)));
+}
 
 /**
  * Starts a session that is not running, resuming its conversation when it
@@ -37,7 +50,7 @@ export async function resumeAgentSession(sessionId: string) {
     if (worktreeRow?.archivedAt != null) return err({ type: 'worktree_archived' as const });
   }
 
-  const cwd = resolve(row.cwd ?? getPrimaryWorktreeRow(row.workItemId).path);
+  const cwd = resolveResumeCwd(row);
 
   if (row.shell) {
     return resumeShellTerminalSession({ ...row, shell: row.shell, cwd });

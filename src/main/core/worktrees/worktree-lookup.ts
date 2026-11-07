@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@main/db/client';
 import {
@@ -35,6 +36,16 @@ export function findWorktreeRowByPath(path: string): WorkItemWorktreeRow | undef
     .where(eq(workItemWorktrees.path, path))
     .limit(1)
     .all()[0];
+}
+
+/**
+ * Where a lane's agents and terminals start: the companion worktree its
+ * checkout is nested in (`work-items/companion-checkout.ts`), so a tool run at
+ * the companion's root sees both, as in the main checkouts; else the checkout.
+ * Its git (checkpoints, diffs, setup) stays the checkout's own.
+ */
+export function laneSessionCwd(lane: { path: string; companionPath: string | null }): string {
+  return resolve(lane.companionPath ?? lane.path);
 }
 
 /** Every work item has exactly one primary worktree from migration 0033 on; a missing one is a bug. */

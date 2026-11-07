@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -311,5 +312,48 @@ describe('forkToNewWorktree (real DB, git, lane provisioning and Agent SDK fork)
 
     expect(db.select().from(workItemWorktrees).all()).toHaveLength(lanesBefore);
     expect(db.select().from(agentSessions).all()).toHaveLength(1);
+  });
+
+  // Review round 1 (devstation-4x42.242): a companion lane's chats run at its companion root, so
+  // its conversation is kept there, and the forked chat runs at the new lane's companion root.
+  it("forks a companion lane's conversation from its companion root into the new lane's", async () => {
+    const companion = path.join(repo.root, 'companion');
+    mkdirSync(companion);
+    await git(['init', '-b', 'main'], companion);
+    await git(['config', 'user.email', 'test@test.com'], companion);
+    await git(['config', 'user.name', 'Test'], companion);
+    writeFileSync(path.join(companion, '.gitignore'), '/app/\n');
+    await git(['add', '.gitignore'], companion);
+    await git(['commit', '-m', 'companion'], companion);
+    db.update(repoSettings)
+      .set({
+        overrides: JSON.stringify({
+          worktreeFolder: path.join(repo.root, 'forks'),
+          companionRepo: { path: companion, appFolder: 'app' },
+        }),
+      })
+      .run();
+    // The source chat ran at its lane's companion root: its transcript is kept there, not at the lane.
+    const sourceCompanion = path.join(repo.root, 'source-companion');
+    mkdirSync(sourceCompanion);
+    db.update(workItemWorktrees)
+      .set({ companionPath: sourceCompanion, companionRepoPath: companion })
+      .where(eq(workItemWorktrees.id, SOURCE_LANE_ID))
+      .run();
+    db.update(agentSessions).set({ cwd: sourceCompanion }).run();
+    rmSync(resolveClaudeTranscriptPath(sourceLane, CLAUDE_SESSION_ID) as string);
+    seedClaudeTranscript(claudeConfigDir, sourceCompanion);
+
+    const { sessionId, worktreeId } = await forkTurn1();
+
+    const lane = laneRow(worktreeId);
+    expect(lane.companionPath).not.toBeNull();
+    expect(lane.path).toBe(path.join(lane.companionPath as string, 'app'));
+    const session = sessionRow(sessionId);
+    expect(session.cwd).toBe(lane.companionPath);
+    const externalId = session.externalSessionId as string;
+    expect(claudeConversationExists(lane.companionPath as string, externalId)).toBe(true);
+    expect(resolveClaudeTranscriptPath(lane.path, externalId)).toBeNull();
+    await expectTurn1Files(lane.path);
   });
 });

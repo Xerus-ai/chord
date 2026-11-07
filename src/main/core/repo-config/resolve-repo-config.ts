@@ -11,6 +11,7 @@ import {
 } from '@shared/run-scripts';
 import { WORKTREE_SOURCE_VISIBILITIES } from '@shared/worktree-sources';
 import { DEFAULT_FILES_TO_COPY, type ProjectSettings } from '@main/core/projects/settings/schema';
+import { companionRepoSchema } from '@main/core/work-items/companion-checkout';
 import { db } from '@main/db/client';
 import { repoSettings } from '@main/db/schema-repo-settings';
 import { readTeamConfigAtRef } from './read-team-config';
@@ -69,6 +70,13 @@ export const repoJustMeSettingsSchema = z
       .optional(),
     /** Settings › Git › AI fields set for this repository only; the rest inherit. */
     gitAi: gitAiOverrideSchema.optional(),
+    /**
+     * The repository that contains this one on this machine (`companion-checkout.ts`):
+     * new lanes get the companion's worktree with their checkout nested in it.
+     * Just me only, never the team file: the companion is private, its path
+     * personal.
+     */
+    companionRepo: companionRepoSchema.optional(),
   })
   .strict();
 

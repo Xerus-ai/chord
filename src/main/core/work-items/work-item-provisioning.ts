@@ -113,6 +113,8 @@ export async function runWorkItemProvisioning(
           slug: lane.slug,
           branchOrigin: lane.branchOrigin,
           forkSource: lane.forkSource,
+          companionPath: lane.companionPath,
+          companionRepoPath: lane.companionRepoPath,
           setupStatus: 'pending',
         })
         .where(and(eq(workItemWorktrees.workItemId, id), eq(workItemWorktrees.isPrimary, 1)))

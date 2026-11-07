@@ -7,7 +7,11 @@ import {
   type SoloRemovalRefusal,
 } from '@main/core/solo/solo-lane-removal';
 import { stopWorktreeSessions } from '@main/core/work-items/stop-checkout-sessions';
-import { removeLaneCheckout } from '@main/core/work-items/work-item-worktree-git';
+import {
+  checkLaneRemovable,
+  removeLaneCheckout,
+  type LaneRemovalRefusal,
+} from '@main/core/work-items/work-item-worktree-git';
 import { db } from '@main/db/client';
 import { workItemWorktrees } from '@main/db/schema-work-items';
 import { log } from '@main/lib/logger';
@@ -28,6 +32,7 @@ export type ArchiveWorktreeError =
   | { type: 'not_found' }
   | { type: 'branch_not_deletable' }
   | SoloRemovalRefusal
+  | LaneRemovalRefusal
   | ArchiveDecisionError;
 
 /**
@@ -41,7 +46,10 @@ export type ArchiveWorktreeError =
  * `deleteBranch` also deletes the branch, which only a lane that loses
  * nothing may do (`decideArchiveBranchDelete`); asked anyway, the archive is
  * refused before anything changes. An adopted checkout is the user's: it is
- * only marked archived, never snapshotted or removed.
+ * only marked archived, never snapshotted or removed. A companion checkout the
+ * lane is nested in goes with it, and is not snapshotted: one holding anything
+ * refuses the archive up front (`checkLaneRemovable`); Restore makes it again
+ * from its companion branch.
  */
 export async function archiveWorktree(
   worktreeId: string,
@@ -52,6 +60,8 @@ export async function archiveWorktree(
 
   const plan = planWorktreeArchive({ isPrimary: row.isPrimary === 1, archivedAt: row.archivedAt });
   if (!plan.success) return err(plan.error);
+  const removable = await checkLaneRemovable(row);
+  if (!removable.success) return removable;
   if (opts.deleteBranch) {
     const { uncommitted } = await inspectWorktreeGitState(row.path);
     if (!(await canDeleteLaneBranch(row, uncommitted))) {

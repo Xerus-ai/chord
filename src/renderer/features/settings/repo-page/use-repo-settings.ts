@@ -43,18 +43,27 @@ export function useRepoSettings(repoId: string) {
     [queryClient, repoId]
   );
 
+  /** Resolves null once saved, else why it was not: for a field that shows it in place. */
+  const saveJustMeReporting = useCallback(
+    async (patch: JustMePatch): Promise<string | null> => {
+      const result = await rpc.repoSettings.updateJustMe({ repoId, patch });
+      await refresh();
+      return result.success ? null : result.error.message;
+    },
+    [repoId, refresh]
+  );
+
   /** Resolves true once saved; a value the user can fix is shown as a toast. */
   const saveJustMe = useCallback(
     async (patch: JustMePatch): Promise<boolean> => {
-      const result = await rpc.repoSettings.updateJustMe({ repoId, patch });
-      await refresh();
-      if (!result.success) {
-        toast({ title: 'Not saved', description: result.error.message, variant: 'destructive' });
+      const refused = await saveJustMeReporting(patch);
+      if (refused !== null) {
+        toast({ title: 'Not saved', description: refused, variant: 'destructive' });
         return false;
       }
       return true;
     },
-    [repoId, refresh]
+    [saveJustMeReporting]
   );
 
   const saveTeam = useCallback(
@@ -99,6 +108,7 @@ export function useRepoSettings(repoId: string) {
     lanes,
     refresh,
     saveJustMe,
+    saveJustMeReporting,
     saveTeam,
     revokeTrust,
     turnOffAlwaysTrust,

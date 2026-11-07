@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { err, ok } from '@shared/result';
 import type { TerminalShell } from '@shared/terminal-shells';
@@ -9,6 +8,7 @@ import {
 } from '@main/core/terminal-shells/detect-terminal-shells';
 import { startShellSession } from '@main/core/work-items/session-service';
 import { resolveSessionLaneEnv } from '@main/core/work-items/session-task-env';
+import { laneSessionCwd } from '@main/core/worktrees/worktree-lookup';
 import { db } from '@main/db/client';
 import { agentSessions, type WorkItemWorktreeRow } from '@main/db/schema-work-items';
 
@@ -34,7 +34,7 @@ export async function createShellTerminalSession(args: {
 
   const id = randomUUID();
   const now = Math.floor(Date.now() / 1000);
-  const cwd = resolve(args.worktree.path);
+  const cwd = laneSessionCwd(args.worktree);
 
   await db.insert(agentSessions).values({
     id,

@@ -97,7 +97,8 @@ function insertForkSession(
 export async function createForkedChat(args: {
   chatTurn: ChatTurn;
   fork: ForkedConversation;
-  lane: { id: string; path: string };
+  /** `path` is the lane's checkout, where checkpoints live; `cwd` where the chat runs. */
+  lane: { id: string; path: string; cwd: string };
   checkpointLane?: CheckpointLane;
 }): Promise<string> {
   const { session, turnRow } = args.chatTurn;
@@ -107,7 +108,7 @@ export async function createForkedChat(args: {
   const sessionId = insertForkSession(session, {
     externalId: args.fork.externalId,
     title: `${sourceTitle} (fork)`,
-    cwd: args.lane.path,
+    cwd: args.lane.cwd,
     worktreeId: args.lane.id,
   });
   const turnIds = copyThreadToSession({
