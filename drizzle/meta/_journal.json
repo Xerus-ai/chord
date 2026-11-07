@@ -414,6 +414,13 @@
       "when": 1791274166721,
       "tag": "0058_backfill_chat_message_created_at_ms",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1794060845868,
+      "tag": "0059_lane_companion_checkout",
+      "breakpoints": true
     }
   ]
 }

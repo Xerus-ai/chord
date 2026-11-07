@@ -12,7 +12,11 @@ import {
 } from '@main/core/solo/solo-lane-removal';
 import { comparablePath } from '@main/core/utils/comparable-path';
 import { stopWorktreeSessions } from '@main/core/work-items/stop-checkout-sessions';
-import { removeLaneCheckout } from '@main/core/work-items/work-item-worktree-git';
+import {
+  checkLaneRemovable,
+  removeLaneCheckout,
+  type LaneRemovalRefusal,
+} from '@main/core/work-items/work-item-worktree-git';
 import { db } from '@main/db/client';
 import { agentSessions, repos, workItemWorktrees } from '@main/db/schema-work-items';
 import { log } from '@main/lib/logger';
@@ -27,6 +31,7 @@ export type DeleteWorktreeError =
   | { type: 'not_found' }
   | DeleteWorktreeDecisionError
   | SoloRemovalRefusal
+  | LaneRemovalRefusal
   | { type: 'checkpoint_cleanup_failed'; message: string }
   | { type: 'checkout_remove_failed'; message: string };
 
@@ -57,6 +62,8 @@ async function isRepoCheckout(folder: string): Promise<boolean> {
  * contract as deleting a work item (`deleteWorkItem`) and the same order as
  * `archiveWorktree`:
  *
+ * 0. A companion checkout the lane is nested in must hold nothing a removal
+ *    would lose (`checkLaneRemovable`), checked before anything changes.
  * 1. Waiters are cancelled, sessions stopped and the workspace released
  *    first. On Windows `git worktree remove` fails while a terminal or a
  *    lifecycle process has its cwd inside the checkout, and releasing the
@@ -83,6 +90,8 @@ export async function deleteWorktree(
     isRepoCheckout: await isRepoCheckout(row.path),
   });
   if (!plan.success) return err(plan.error);
+  const removable = await checkLaneRemovable(row);
+  if (!removable.success) return removable;
   // Out of the Solo queue, or its Solo released, before anything goes.
   const solo = await releaseLaneSoloForRemoval(worktreeId);
   if (!solo.success) return solo;

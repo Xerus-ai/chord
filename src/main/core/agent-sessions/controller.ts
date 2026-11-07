@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
 import { asc, eq } from 'drizzle-orm';
 import { isValidProviderId, type AgentProviderId } from '@shared/agent-provider-registry';
 import { createRPCController } from '@shared/ipc/rpc';
@@ -16,6 +15,7 @@ import { resolveSessionLaneEnv } from '@main/core/work-items/session-task-env';
 import {
   findWorktreeRow,
   getPrimaryWorktreeRow,
+  laneSessionCwd,
   resolveSessionWorktreeRow,
 } from '@main/core/worktrees/worktree-lookup';
 import { db } from '@main/db/client';
@@ -125,7 +125,7 @@ export const agentSessionsController = createRPCController({
       communication: args.communication ?? 'pty',
       externalSessionId: args.externalSessionId ?? null,
       title: args.title ?? null,
-      cwd: worktree.row.path,
+      cwd: laneSessionCwd(worktree.row),
       worktreeId: worktree.row.id,
       status: 'active',
       createdAt: now,
@@ -194,7 +194,7 @@ export const agentSessionsController = createRPCController({
       return err({ type: 'no_agent_provider' as const });
     }
     const providerId: AgentProviderId = requestedProvider;
-    const cwd = resolve(worktree.row.path);
+    const cwd = laneSessionCwd(worktree.row);
 
     // Refuse to open a terminal that would immediately die with the CLI's
     // "No conversation found" — the id must have a persisted conversation.

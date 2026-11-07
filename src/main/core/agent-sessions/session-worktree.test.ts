@@ -26,6 +26,8 @@ function makeRow(overrides: Partial<WorkItemWorktreeRow> = {}): WorkItemWorktree
     archivedAt: null,
     gitLastError: null,
     gitLastErrorAt: null,
+    companionPath: null,
+    companionRepoPath: null,
     ...overrides,
   };
 }

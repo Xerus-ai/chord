@@ -92,13 +92,31 @@ describe('companion checkouts', () => {
     expect(await git(['branch', '--list', 'companion/*'], companion.path)).toBe('');
   });
 
-  it('refuses a detached companion, a taken branch or folder, and a folder that is not a main checkout', async () => {
+  // A restored lane, or a later lane of the same branch, gets the companion branch its earlier
+  // checkout left, as it is; one checked out elsewhere is not taken.
+  it('checks out a companion branch an earlier lane left, and refuses one checked out elsewhere', async () => {
     await git(['branch', 'companion/feat/login'], companion.path);
+    const kept = path.join(root, 'kept');
+    await git(['worktree', 'add', kept, 'companion/feat/login'], companion.path);
+    fs.writeFileSync(path.join(kept, 'notes.md'), 'from the earlier lane\n');
+    await git(['add', 'notes.md'], kept);
+    await git(['commit', '-m', 'notes'], kept);
+    const tip = await git(['rev-parse', 'HEAD'], kept);
+
     expect(await provision()).toMatchObject({
       success: false,
-      error: { type: 'branch_exists', branch: 'companion/feat/login' },
+      error: { type: 'branch_checked_out', branch: 'companion/feat/login' },
     });
+    expect(fs.existsSync(path.join(pool, 'login'))).toBe(false);
 
+    await git(['worktree', 'remove', kept], companion.path);
+    const made = await provision();
+    if (!made.success) throw new Error(made.error.message);
+    expect(await git(['rev-parse', 'HEAD'], made.data.companionPath)).toBe(tip);
+    expect(fs.existsSync(path.join(made.data.companionPath, 'notes.md'))).toBe(true);
+  });
+
+  it('refuses a detached companion, a taken folder, and a folder that is not a main checkout', async () => {
     fs.mkdirSync(path.join(pool, 'login'), { recursive: true });
     expect(await provision('feat/other')).toMatchObject({
       success: false,
@@ -171,6 +189,28 @@ describe('companion checkouts', () => {
       error: { type: 'companion_has_changes', message: expect.stringContaining('(x)') },
     });
     expect(fs.readFileSync(path.join(made.data.companionPath, 'x'), 'utf8')).toBe('two\n');
+  });
+
+  // verify-run P3 on cced109: with -z a rename or copy carries its source path as the next
+  // entry, which is skipped; read as an entry of its own it would list a cut-off name.
+  it('names a renamed file once, by its new path, among the changes it keeps', async () => {
+    fs.writeFileSync(path.join(companion.path, 'notes-old.md'), 'notes\n');
+    await git(['add', 'notes-old.md'], companion.path);
+    await git(['commit', '-m', 'notes'], companion.path);
+    const made = await provision();
+    if (!made.success) throw new Error(made.error.message);
+    await git(['mv', 'notes-old.md', 'notes-new.md'], made.data.companionPath);
+    expect(await git(['status', '--porcelain'], made.data.companionPath)).toBe(
+      'R  notes-old.md -> notes-new.md'
+    );
+    const removed = await removeCompanionCheckout({
+      companion,
+      companionPath: made.data.companionPath,
+    });
+    expect(removed).toMatchObject({
+      success: false,
+      error: { type: 'companion_has_changes', message: expect.stringContaining('(notes-new.md);') },
+    });
   });
 
   it('the setting takes an absolute companion path and a folder inside it', () => {

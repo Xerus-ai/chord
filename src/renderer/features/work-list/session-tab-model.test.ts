@@ -20,6 +20,7 @@ function worktree(id: string, branchName: string | null, isPrimary: boolean): Wo
     setupStatus: null,
     forkSource: null,
     checkoutOrigin: 'chord',
+    companionPath: null,
     isPrimary,
     title: null,
     createdAt: 1,

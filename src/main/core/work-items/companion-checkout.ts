@@ -3,6 +3,7 @@ import path from 'node:path';
 import z from 'zod';
 import { err, ok, type Result } from '@shared/result';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
+import { findBranchCheckout } from '@main/core/projects/worktrees/find-branch-checkout';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
 
 /**
@@ -15,11 +16,19 @@ import { GIT_EXECUTABLE } from '@main/core/utils/exec';
  * `<pool>/<slug>/<appFolder>`, so whatever starts at the companion's root
  * sees both, as it does in the main checkouts.
  *
+ * The companion branch outlives its worktree, as a lane's branch does: a lane
+ * restored, or a later lane of the same branch, checks it out again.
+ *
  * The git half only: settings- and database-free like `lane-checkout.ts`, so
  * it is tested against real repositories without an Electron runtime.
  */
 
 const BRANCH_PREFIX = 'companion';
+
+/** The companion branch that pairs with a lane on `laneBranch`. */
+export function companionBranchFor(laneBranch: string): string {
+  return `${BRANCH_PREFIX}/${laneBranch}`;
+}
 
 function isFolderInside(value: string): boolean {
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) return false;
@@ -47,7 +56,7 @@ export type CompanionCheckoutError =
   | { type: 'not_a_main_checkout'; message: string }
   | { type: 'detached_head'; message: string }
   | { type: 'app_folder_not_ignored'; message: string }
-  | { type: 'branch_exists'; branch: string; message: string }
+  | { type: 'branch_checked_out'; branch: string; path: string; message: string }
   | { type: 'path_exists'; path: string; message: string }
   | { type: 'lane_checkout_present'; path: string; message: string }
   | { type: 'companion_has_changes'; path: string; message: string }
@@ -59,6 +68,8 @@ export interface CompanionCheckout {
   companionBranch: string;
   /** Where the lane's own checkout goes. Not created here. */
   appPath: string;
+  /** This call made the branch, rather than checking out one an earlier lane left. */
+  branchCreated: boolean;
 }
 
 async function git(cwd: string, args: string[]): Promise<string> {
@@ -110,10 +121,12 @@ function isMainCheckout(folder: string): boolean {
 }
 
 /**
- * Creates the companion half of a lane's pair. Refuses, creating nothing, when
+ * Creates the companion half of a lane's pair: a new companion branch at the
+ * commit the companion's main checkout is on, or the companion branch an
+ * earlier lane of this branch left, as it is. Refuses, creating nothing, when
  * the companion is not a main checkout, is on no branch, does not ignore
- * `appFolder` (the lane's checkout would show as untracked files in it), or
- * when the branch or the folder is already taken.
+ * `appFolder` (the lane's checkout would show as untracked files in it), when
+ * the folder is taken, or when the branch is checked out somewhere else.
  */
 export async function provisionCompanionCheckout(args: {
   companion: CompanionRepo;
@@ -129,7 +142,7 @@ export async function provisionCompanionCheckout(args: {
     });
   }
   const companionPath = path.join(args.poolPath, args.slug);
-  const companionBranch = `${BRANCH_PREFIX}/${args.laneBranch}`;
+  const companionBranch = companionBranchFor(args.laneBranch);
   try {
     const head = await git(companion.path, ['rev-parse', '--abbrev-ref', 'HEAD']);
     if (head === 'HEAD') {
@@ -145,20 +158,6 @@ export async function provisionCompanionCheckout(args: {
         message: `${companion.path} does not ignore ${appFolder}/, so a lane's checkout there would show as untracked files.`,
       });
     }
-    if (
-      await gitAnswers(companion.path, [
-        'show-ref',
-        '--verify',
-        '--quiet',
-        `refs/heads/${companionBranch}`,
-      ])
-    ) {
-      return err({
-        type: 'branch_exists',
-        branch: companionBranch,
-        message: `The companion already has a branch ${companionBranch}.`,
-      });
-    }
     if (existsSync(companionPath)) {
       return err({
         type: 'path_exists',
@@ -166,19 +165,42 @@ export async function provisionCompanionCheckout(args: {
         message: `${companionPath} already exists.`,
       });
     }
-    const startPoint = await git(companion.path, ['rev-parse', 'HEAD']);
-    await git(companion.path, [
-      'worktree',
-      'add',
-      '-b',
-      companionBranch,
-      companionPath,
-      startPoint,
+    const ctx = new LocalExecutionContext({ root: companion.path });
+    // A registration whose folder was deleted outside git is not a checkout.
+    await git(companion.path, ['worktree', 'prune']);
+    const holder = await findBranchCheckout(ctx, companionBranch);
+    if (holder) {
+      return err({
+        type: 'branch_checked_out',
+        branch: companionBranch,
+        path: holder,
+        message: `The companion's branch ${companionBranch} is checked out in ${holder}.`,
+      });
+    }
+    const branchExists = await gitAnswers(companion.path, [
+      'show-ref',
+      '--verify',
+      '--quiet',
+      `refs/heads/${companionBranch}`,
     ]);
+    if (branchExists) {
+      await git(companion.path, ['worktree', 'add', companionPath, companionBranch]);
+    } else {
+      const startPoint = await git(companion.path, ['rev-parse', 'HEAD']);
+      await git(companion.path, [
+        'worktree',
+        'add',
+        '-b',
+        companionBranch,
+        companionPath,
+        startPoint,
+      ]);
+    }
     return ok({
       companionPath,
       companionBranch,
       appPath: path.join(companionPath, companion.appFolder),
+      branchCreated: !branchExists,
     });
   } catch (error) {
     return err(gitFailed('Creating the companion checkout', error));
@@ -186,10 +208,39 @@ export async function provisionCompanionCheckout(args: {
 }
 
 /**
+ * Refuses a companion checkout holding anything a removal would lose: changes,
+ * untracked files, and ignored ones too, because `git worktree remove` deletes
+ * ignored files with the folder, and a companion's ignored files (local state,
+ * .env) are the user's, not the lane's. The lane's own folder does not count.
+ * Lane removals run it before they remove anything (`removeLaneCheckout`).
+ */
+export async function checkCompanionRemovable(args: {
+  companion: CompanionRepo;
+  companionPath: string;
+}): Promise<Result<void, CompanionCheckoutError>> {
+  try {
+    const appPrefix = `${args.companion.appFolder.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
+    const leftovers = (await statusPaths(args.companionPath)).filter(
+      (file) => !file.startsWith(appPrefix)
+    );
+    if (leftovers.length === 0) return ok();
+    return err({
+      type: 'companion_has_changes',
+      path: args.companionPath,
+      message: `${args.companionPath} holds changes or ignored files nothing else keeps (${leftovers
+        .slice(0, 3)
+        .join(', ')}); move, commit or discard them first.`,
+    });
+  } catch (error) {
+    return err(gitFailed('Reading the companion checkout', error));
+  }
+}
+
+/**
  * Removes the companion half after the lane's own checkout is gone. Its branch
  * stays, as a lane's does. Refuses while the lane's checkout is still nested in
  * it (removing the folder would take it along) and while the companion
- * checkout has changes, which are the user's work, not the lane's.
+ * checkout holds anything (`checkCompanionRemovable`).
  */
 export async function removeCompanionCheckout(args: {
   companion: CompanionRepo;
@@ -203,25 +254,17 @@ export async function removeCompanionCheckout(args: {
       message: `The lane's checkout is still at ${appPath}: remove it first.`,
     });
   }
+  const removable = await checkCompanionRemovable(args);
+  if (!removable.success) return removable;
   try {
-    // --ignored as well: `git worktree remove` deletes ignored files with the folder, and a
-    // companion's ignored files (local state, .env) are the user's, not the lane's.
-    const appPrefix = `${args.companion.appFolder.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
-    const leftovers = (await statusPaths(args.companionPath)).filter(
-      (file) => !file.startsWith(appPrefix)
-    );
-    if (leftovers.length > 0) {
-      return err({
-        type: 'companion_has_changes',
-        path: args.companionPath,
-        message: `${args.companionPath} holds changes or ignored files nothing else keeps (${leftovers
-          .slice(0, 3)
-          .join(', ')}); move, commit or discard them first.`,
-      });
-    }
     await git(args.companion.path, ['worktree', 'remove', args.companionPath]);
     return ok();
   } catch (error) {
     return err(gitFailed('Removing the companion checkout', error));
   }
+}
+
+/** Deletes a companion branch a failed create made; one an earlier lane left is never passed. */
+export async function deleteCompanionBranch(companionRepoPath: string, branch: string) {
+  await git(companionRepoPath, ['branch', '-D', branch]);
 }

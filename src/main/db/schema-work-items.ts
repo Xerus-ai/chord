@@ -144,6 +144,12 @@ export const workItemWorktrees = sqliteTable(
     // 'chord' | 'adopted' (worktree-sources/adopt-worktree.ts): Chord never
     // changes an adopted checkout's files or git's worktree list.
     checkoutOrigin: text('checkout_origin').notNull().default('chord'),
+    // The companion repository's linked worktree this lane's checkout is
+    // nested in (work-items/companion-checkout.ts), and that companion's main
+    // checkout, which git runs against once the worktree is gone. Both null for
+    // a lane without a companion. Personal paths: never synced to the cloud.
+    companionPath: text('companion_path'),
+    companionRepoPath: text('companion_repo_path'),
   },
   (table) => ({
     workItemIdIdx: index('idx_work_item_worktrees_work_item_id').on(table.workItemId),

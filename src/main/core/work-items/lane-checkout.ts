@@ -1,13 +1,10 @@
-import { existsSync, realpathSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { safePathSegment } from '@shared/path-name';
 import { err, ok, type Result } from '@shared/result';
 import type { LaneProvisionError } from '@shared/work-item-provision-error';
 import type { ForkSource } from '@shared/worktrees';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import type { IExecutionContext } from '@main/core/execution-context/types';
-import { findBranchCheckout } from '@main/core/projects/worktrees/find-branch-checkout';
 import { LocalWorktreeHost } from '@main/core/projects/worktrees/hosts/local-worktree-host';
 import {
   WorktreeService,
@@ -15,13 +12,25 @@ import {
 } from '@main/core/projects/worktrees/worktree-service';
 import { resolveDefaultBaseRef, resolveLaneBase } from '@main/core/repo-config/resolve-lane-base';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
+import type { CompanionRepo } from './companion-checkout';
+import {
+  branchCheckedOutError,
+  findInterruptedPlacement,
+  placeLaneCheckout,
+  releaseFailedPlacement,
+  type LanePlacement,
+} from './lane-checkout-placement';
+
+export { allocateSlug, branchCheckedOutError } from './lane-checkout-placement';
 
 /**
  * The git half of creating a lane: resolve where it forks from, create the
- * branch and its checkout at `<pool>/<slug>`. Nothing config-driven happens
- * here (files to copy, setup scripts — see `worktrees/lane-setup.ts`), so a
+ * branch and its checkout at `<pool>/<slug>`, or nested in its companion's
+ * worktree (`lane-checkout-placement.ts`). Nothing config-driven happens here
+ * (files to copy, setup scripts — see `worktrees/lane-setup.ts`), so a
  * failure leaves nothing behind: the branch and checkout are created by one
- * `worktree add`, which the engine undoes itself when it fails.
+ * `worktree add`, which the engine undoes itself when it fails, and a
+ * companion half made for it is removed again.
  *
  * Deliberately settings- and database-free, so it is tested against real
  * repositories without an Electron runtime.
@@ -44,28 +53,9 @@ export interface ProvisionedLane {
   branchOrigin: 'chord' | 'user';
   /** Null for a checkout of an existing branch, which forks from nothing. */
   forkSource: ForkSource | null;
-}
-
-/** The branch's last segment, made safe as a directory name, and unique in the pool. */
-export function allocateSlug(poolPath: string, branchName: string): string {
-  const leaf = branchName.split('/').filter(Boolean).pop() ?? branchName;
-  const base = safePathSegment(leaf, 'lane');
-  let slug = base;
-  for (let n = 2; existsSync(path.join(poolPath, slug)); n += 1) slug = `${base}-${n}`;
-  return slug;
-}
-
-/** The refusal a lane gets for a branch checked out somewhere — shared with the preflight. */
-export function branchCheckedOutError(
-  branch: string,
-  holder: string
-): Extract<LaneProvisionError, { type: 'branch_checked_out' }> {
-  return {
-    type: 'branch_checked_out',
-    branch,
-    path: holder,
-    message: `${branch} is already checked out in ${holder}. A lane needs a branch of its own — branch off it instead, or switch that checkout to another branch.`,
-  };
+  /** The companion worktree the checkout is nested in, and the companion's main checkout. */
+  companionPath: string | null;
+  companionRepoPath: string | null;
 }
 
 /** The refusal a lane gets for a branch neither this clone nor the remote has. */
@@ -104,35 +94,6 @@ function describeCheckoutError(error: WorktreeCheckoutError): LaneProvisionError
   }
 }
 
-/** Windows paths are case-insensitive, and a temp folder can be spelled two ways. */
-function comparableRealPath(folder: string): string {
-  const real = realpathSync.native(folder);
-  return process.platform === 'win32' ? real.toLowerCase() : real;
-}
-
-/**
- * devstation-dq2: the checkout an interrupted create left behind, if git has
- * `branchName` checked out directly in this pool. Chord died after `worktree
- * add` ran but before the row moved to it, so nothing else points there.
- * Returns `branch_checked_out` for the branch checked out anywhere else — that
- * checkout is not this item's to take over.
- */
-async function findInterruptedCheckout(
-  repoPath: string,
-  poolPath: string,
-  branchName: string
-): Promise<Result<string | undefined, LaneProvisionError>> {
-  const ctx = new LocalExecutionContext({ root: repoPath });
-  // A registration whose folder was deleted outside git is not a checkout.
-  await ctx.exec(GIT_EXECUTABLE, ['worktree', 'prune']);
-  const holder = await findBranchCheckout(ctx, branchName);
-  if (!holder) return ok(undefined);
-  if (comparableRealPath(path.dirname(holder)) !== comparableRealPath(poolPath)) {
-    return err(branchCheckedOutError(branchName, holder));
-  }
-  return ok(holder);
-}
-
 async function revParse(repoPath: string, ref: string): Promise<string> {
   const { stdout } = await new LocalExecutionContext({ root: repoPath }).exec(GIT_EXECUTABLE, [
     'rev-parse',
@@ -141,19 +102,57 @@ async function revParse(repoPath: string, ref: string): Promise<string> {
   return stdout.trim();
 }
 
+/** Creates the lane's branch checkout at the placement's folder; undoes the placement on failure. */
+async function checkoutAt(
+  args: { repoPath: string; poolPath: string },
+  placement: LanePlacement,
+  checkout:
+    | { kind: 'existing'; branchName: string }
+    | { kind: 'new'; branchName: string; startPoint: string }
+): Promise<Result<string, LaneProvisionError>> {
+  const host = await LocalWorktreeHost.create({ allowedRoots: [args.repoPath, args.poolPath] });
+  const service = new WorktreeService({
+    worktreePoolPath: path.dirname(placement.checkoutPath),
+    repoPath: args.repoPath,
+    ctx: new LocalExecutionContext({ root: args.repoPath }),
+    host,
+  });
+  const slug = path.basename(placement.checkoutPath);
+  const made =
+    checkout.kind === 'existing'
+      ? await service.checkoutExistingBranch({ branchName: checkout.branchName, slug })
+      : await service.checkoutNewBranch({
+          branchName: checkout.branchName,
+          slug,
+          startPoint: checkout.startPoint,
+        });
+  if (made.success) return ok(made.data);
+  return err(await releaseFailedPlacement(placement, describeCheckoutError(made.error)));
+}
+
+function companionFields(placement: LanePlacement) {
+  return {
+    companionPath: placement.companion?.companionPath ?? null,
+    companionRepoPath: placement.companion?.repoPath ?? null,
+  };
+}
+
 export async function provisionLaneCheckout(args: {
   /** The repository's main checkout. */
   repoPath: string;
   /** This repository's folder under the worktree root. */
   poolPath: string;
   request: LaneCheckoutRequest;
+  /** The repository's companion (this machine's setting): the checkout nests in its worktree. */
+  companion?: CompanionRepo;
   /** Runs fetches; pass one carrying GitHub auth. */
   networkContext?: IExecutionContext;
   /** The user chose to fork from the base's last-fetched copy if its fetch fails. */
   allowLocalCopy?: boolean;
   /**
    * Retry of an `interrupted` create: a checkout of this new branch directly in
-   * the pool is the one that create made, and is used as it is.
+   * the pool (or in its companion's worktree there) is the one that create
+   * made, and is used as it is.
    */
   resumeInterrupted?: boolean;
 }): Promise<Result<ProvisionedLane, LaneProvisionError>> {
@@ -166,14 +165,12 @@ export async function provisionLaneCheckout(args: {
       message: `Could not create the worktree folder ${args.poolPath}: ${String(cause)}`,
     });
   }
-  const host = await LocalWorktreeHost.create({ allowedRoots: [args.repoPath, args.poolPath] });
-  const service = new WorktreeService({
-    worktreePoolPath: args.poolPath,
-    repoPath: args.repoPath,
-    ctx: new LocalExecutionContext({ root: args.repoPath }),
-    host,
-  });
-  const slug = allocateSlug(args.poolPath, request.branchName);
+  const place = () =>
+    placeLaneCheckout({
+      poolPath: args.poolPath,
+      branchName: request.branchName,
+      companion: args.companion,
+    });
 
   if (request.kind === 'existing') {
     // Where its PR would merge: the repository's default base, as this clone
@@ -181,25 +178,26 @@ export async function provisionLaneCheckout(args: {
     // the clone already has checks out offline.
     const targetRef = await resolveDefaultBaseRef(args.repoPath, args.networkContext);
     if (!targetRef.success) return err(targetRef.error);
-    const checkout = await service.checkoutExistingBranch({
-      branchName: request.branchName,
-      slug,
-    });
-    if (!checkout.success) return err(describeCheckoutError(checkout.error));
+    const placement = await place();
+    if (!placement.success) return placement;
+    const checkout = await checkoutAt(args, placement.data, request);
+    if (!checkout.success) return checkout;
     return ok({
       worktreePath: checkout.data,
       branchName: request.branchName,
-      slug,
+      slug: placement.data.slug,
       targetRef: targetRef.data,
       forkSha: await revParse(args.repoPath, request.branchName),
       branchOrigin: 'user',
       forkSource: null,
+      ...companionFields(placement.data),
     });
   }
 
   let targetRef: string;
   let forkSha: string;
   let forkSource: ForkSource;
+  let placement: LanePlacement | undefined;
   if (request.kind === 'new') {
     const base = await resolveLaneBase({
       repoPath: args.repoPath,
@@ -212,26 +210,30 @@ export async function provisionLaneCheckout(args: {
     ({ targetRef, forkSha, forkSource } = base.data);
 
     if (args.resumeInterrupted) {
-      const interrupted = await findInterruptedCheckout(
-        args.repoPath,
-        args.poolPath,
-        request.branchName
-      );
+      const interrupted = await findInterruptedPlacement({
+        repoPath: args.repoPath,
+        poolPath: args.poolPath,
+        branchName: request.branchName,
+        companion: args.companion,
+      });
       if (!interrupted.success) return err(interrupted.error);
-      if (interrupted.data) {
+      if (interrupted.data?.exists) {
         // Nothing ran in it while Chord was down, so its tip is the commit the
         // interrupted create forked from. `forkSource` is how this Retry
         // obtained the base.
         return ok({
-          worktreePath: interrupted.data,
+          worktreePath: interrupted.data.checkoutPath,
           branchName: request.branchName,
-          slug: path.basename(interrupted.data),
+          slug: interrupted.data.slug,
           targetRef,
           forkSha: await revParse(args.repoPath, request.branchName),
           branchOrigin: 'chord',
           forkSource,
+          ...companionFields(interrupted.data),
         });
       }
+      // Only its companion half was made: the checkout goes there.
+      placement = interrupted.data;
     }
   } else {
     // A secondary lane forks from the work item's own branch, in this clone.
@@ -246,19 +248,25 @@ export async function provisionLaneCheckout(args: {
     }
   }
 
-  const checkout = await service.checkoutNewBranch({
+  if (!placement) {
+    const placed = await place();
+    if (!placed.success) return placed;
+    placement = placed.data;
+  }
+  const checkout = await checkoutAt(args, placement, {
+    kind: 'new',
     branchName: request.branchName,
-    slug,
     startPoint: forkSha,
   });
-  if (!checkout.success) return err(describeCheckoutError(checkout.error));
+  if (!checkout.success) return checkout;
   return ok({
     worktreePath: checkout.data,
     branchName: request.branchName,
-    slug,
+    slug: placement.slug,
     targetRef,
     forkSha,
     branchOrigin: 'chord',
     forkSource,
+    ...companionFields(placement),
   });
 }
