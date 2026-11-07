@@ -8,6 +8,7 @@ import { GIT_EXECUTABLE } from '@main/core/utils/exec';
 import { log } from '@main/lib/logger';
 import {
   checkCompanionRemovable,
+  deleteCompanionBranch,
   provisionCompanionCheckout,
   removeCompanionCheckout,
   type CompanionRepo,
@@ -132,7 +133,8 @@ export type LaneCompanionRestoreError = { type: 'companion_failed'; message: str
 /**
  * Restore's companion half, made again where the row recorded it, from the
  * companion branch its archive left, before the lane's own checkout goes back
- * inside it. Returns the undo for a lane checkout that is then refused.
+ * inside it. Returns the undo for a lane checkout that is then refused, which
+ * also deletes a companion branch this restore had to make.
  */
 export async function restoreLaneCompanion(
   lane: LaneCheckoutRow,
@@ -152,9 +154,12 @@ export async function restoreLaneCompanion(
       message: `Companion repository: ${made.error.message}`,
     });
   }
+  const { branchCreated, companionBranch } = made.data;
   return ok(async () => {
     const removed = await removeCompanionCheckout(paired);
     if (!removed.success) throw new Error(removed.error.message);
+    // A branch this restore made (its companion branch was gone) goes too, as at create.
+    if (branchCreated) await deleteCompanionBranch(paired.companion.path, companionBranch);
   });
 }
 

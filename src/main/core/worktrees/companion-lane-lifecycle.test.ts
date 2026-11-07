@@ -137,8 +137,20 @@ describe('a lane nested in a companion worktree', () => {
     expect(readLaneRow('lane-c').archivedAt).not.toBeNull();
   });
 
-  // e2e companion-repo run 1: on Windows the lane's removal can leave its folder behind, empty,
-  // which read as the lane checkout still nested in the companion and kept the companion.
+  // Review round 1 P3: a restore that had to make the companion branch (it was deleted meanwhile)
+  // deletes it again when the lane checkout is then refused, as a failed create does.
+  it('deletes the companion branch a refused restore made', async () => {
+    await archiveWorktree('lane-c');
+    await git(['branch', '-D', 'companion/chord/c'], companionRepo);
+    await git(['worktree', 'add', path.join(repo.root, 'elsewhere'), 'chord/c'], repo.repoDir);
+
+    const result = await restoreWorktree('lane-c');
+
+    expect(result).toMatchObject({ success: false, error: { type: 'branch_checked_out' } });
+    expect(existsSync(companionPath)).toBe(false);
+    expect(await git(['branch', '--list', 'companion/*'], companionRepo)).toBe('');
+  });
+
   // e2e companion-repo: right after the lane's view closed, its folders were still held for a
   // moment, and on Windows the removal failed "Permission denied" and kept the companion.
   it.runIf(process.platform === 'win32')(
