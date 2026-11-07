@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isRunning } from './_testing/run-process';
 
 /**
  * A lane's checkout is never removed under a running process: deleting the
@@ -75,14 +76,14 @@ describe('deleting a lane with runs', () => {
     await acquireWorktreeWorkspace(fixture.readLaneRow(SECONDARY_ID));
     await startLaneRun({ laneId: SECONDARY_ID, scriptId: 'web' }, fixture.neverAsk);
     await runLaneTest({ laneId: SECONDARY_ID }, fixture.neverAsk);
-    const webPid = await fixture.waitForPid(path.join(secondaryPath, 'serve.pid'));
-    const testPid = await fixture.waitForPid(path.join(secondaryPath, 'stubborn.pid'));
+    const web = await fixture.waitForRunProcess(path.join(secondaryPath, 'serve.pid'));
+    const test = await fixture.waitForRunProcess(path.join(secondaryPath, 'stubborn.pid'));
 
     const result = await deleteWorktree(SECONDARY_ID);
 
     expect(result).toEqual({ success: true, data: { workItemId: ITEM_ID } });
-    expect(fixture.isAlive(webPid)).toBe(false);
-    expect(fixture.isAlive(testPid)).toBe(false);
+    expect(await isRunning(web)).toBe(false);
+    expect(await isRunning(test)).toBe(false);
     expect(fs.existsSync(secondaryPath)).toBe(false);
     expect(fs.readFileSync(teardownMarker, 'utf8')).toBe(SECONDARY_ID);
     expect(readLaneRunState(SECONDARY_ID).scripts).toEqual({});

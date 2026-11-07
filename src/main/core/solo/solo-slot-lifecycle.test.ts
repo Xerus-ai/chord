@@ -3,13 +3,13 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   insertRepoAndItems,
-  isAlive,
   neverAsk,
   readLaneRow,
   removeLaneRepo,
   REPO_ID,
   type LaneRepo,
 } from '@main/core/lane-runs/_testing/lane-run-fixture';
+import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
 import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
 import { deleteWorkItem } from '@main/core/work-items/work-item-crud';
 import { archiveWorktree } from '@main/core/worktrees/archive-worktree';
@@ -91,7 +91,8 @@ describe('the Solo slot across lane and app lifetimes', () => {
     if (!result.success || result.data.status !== 'holding') {
       throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
     }
-    return waitForRunMark(root, laneId);
+    const mark = await waitForRunMark(root, laneId);
+    return { ...mark, process: await runProcessOf(mark.pid) };
   }
 
   const queueOf = async () => (await readSoloView(REPO_ID)).queue.map((entry) => entry.laneId);
@@ -127,7 +128,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
 
       expect(result).toEqual({ success: true, data: { workItemId: 'item-a' } });
       expect(sawCtrlC(root, 'lane-a2')).toBe(true);
-      expect(isAlive(mark.pid)).toBe(false);
+      expect(await isRunning(mark.process)).toBe(false);
       expect(hashRootFiles(root)).toEqual(before);
       expect(await headOf(root)).toBe(head);
       expect(await branchOf(root)).toBe('main');
@@ -172,7 +173,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
           .all()
           .map((item) => item.id)
       ).toContain('item-a');
-      expect(isAlive(mark.pid)).toBe(true);
+      expect(await isRunning(mark.process)).toBe(true);
       expect((await readSoloView(REPO_ID)).holder?.laneId).toBe('lane-a2');
       expect(fs.readFileSync(path.join(root, 'scratch.md'), 'utf8')).toBe('edited in the root\n');
     });
@@ -252,7 +253,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
       await settleSoloOnQuit();
 
       expect(sawCtrlC(root, 'lane-a')).toBe(true);
-      expect(isAlive(mark.pid)).toBe(false);
+      expect(await isRunning(mark.process)).toBe(false);
       expect(readLaneRunState('lane-b').scripts).toEqual({});
       expect((await readSoloState(root)).status).toBe('none');
       expect(hashRootFiles(root)).toEqual(before);
@@ -266,7 +267,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
 
       await settleSoloOnQuit();
 
-      expect(isAlive(mark.pid)).toBe(false);
+      expect(await isRunning(mark.process)).toBe(false);
       expect((await readSoloState(root)).status).toBe('held');
       expect(fs.readFileSync(path.join(root, 'scratch.md'), 'utf8')).toBe('edited in the root\n');
     });
