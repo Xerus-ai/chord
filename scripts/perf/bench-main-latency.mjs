@@ -13,7 +13,7 @@
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { launchSeededApp, ROOT } from '../e2e/seeded-app.mjs';
+import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
 const runs = Number(process.argv[3] ?? 2);

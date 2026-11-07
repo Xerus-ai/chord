@@ -7,8 +7,10 @@
     "src/{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
     // The artifact-page runtime: esbuild bundles these in scripts/artifact-runtime/artifact-runtime-plugin.mjs.
     "src/artifact-runtime/{runtime-entry,chord-page,mermaid-standalone-entry,docx-viewer-entry}.ts",
-    // E2E suites, run as `node scripts/e2e/<suite>.mjs`.
-    "scripts/e2e/*.mjs",
+    // E2E suites, run as `node scripts/e2e/suites/<suite>.mjs`, and the helpers run on their own
+    // (the e2e build, the UI identity compare, the skill-run launcher the session skills import).
+    "scripts/e2e/suites/*.mjs",
+    "scripts/e2e/lib/{build-e2e-app,ui-identity-compare,skill-run}.mjs",
     // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
     "scripts/release/*.ts",
   ],

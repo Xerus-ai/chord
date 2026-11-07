@@ -87,10 +87,10 @@ Thumbs.db
 
 src/main/appConfig.json
 
-# Built e2e apps: `.e2e-app` and the named ones (`node scripts/e2e/build-e2e-app.mjs .e2e-app-history`).
+# Built e2e apps: `.e2e-app` and the named ones (`node scripts/e2e/lib/build-e2e-app.mjs .e2e-app-history`).
 .e2e-app*/
 
-# e2e run records and their user-perspective reviews (scripts/e2e/experience/run-record.mjs)
+# e2e run records and their user-perspective reviews (scripts/e2e/lib/experience/run-record.mjs)
 .e2e-runs/
 
 # Screenshots from every run: e2e suites (screenshots/e2e), design-parity
