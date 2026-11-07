@@ -47,7 +47,7 @@ export const companionRepoSchema = z
     appFolder: z
       .string()
       .trim()
-      .refine(isFolderInside, 'must be a folder inside the companion, without ..'),
+      .refine(isFolderInside, "must be inside the companion, with no '..'"),
   })
   .strict();
 

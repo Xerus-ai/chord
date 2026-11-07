@@ -71,7 +71,7 @@ export const repoJustMeSettingsSchema = z
     /** Settings › Git › AI fields set for this repository only; the rest inherit. */
     gitAi: gitAiOverrideSchema.optional(),
     /**
-     * A repository this one sits in on this machine (`companion-checkout.ts`):
+     * The repository that contains this one on this machine (`companion-checkout.ts`):
      * new lanes get the companion's worktree with their checkout nested in it.
      * Just me only, never the team file: the companion is private, its path
      * personal.

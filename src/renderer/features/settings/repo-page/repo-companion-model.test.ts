@@ -21,9 +21,9 @@ describe('describeCompanionRefusal', () => {
   it('names each refused field as the row does, and leaves anything else as it is', () => {
     expect(
       describeCompanionRefusal(
-        'companionRepo.appFolder: must be a folder inside the companion, without ..'
+        "companionRepo.appFolder: must be inside the companion, with no '..'"
       )
-    ).toBe('The folder must be a folder inside the companion, without ..');
+    ).toBe("The folder must be inside the companion, with no '..'");
     expect(
       describeCompanionRefusal(
         'companionRepo.path: must be an absolute path; companionRepo.appFolder: Required'

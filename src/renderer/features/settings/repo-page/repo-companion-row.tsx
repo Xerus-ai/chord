@@ -11,8 +11,8 @@ import { describeCompanionRefusal, suggestAppFolder } from './repo-companion-mod
 type Companion = NonNullable<RepoJustMeSettings['companionRepo']>;
 
 /**
- * Repo › General › Companion repository (devstation-4x42.243): a repository
- * this one sits in on this machine. New lanes get the companion's own
+ * Repo › General › Companion repository (devstation-4x42.243): the repository
+ * that contains this one on this machine. New lanes get the companion's own
  * worktree with their checkout nested at the folder named here, and their
  * sessions start at the companion's root. Just me only: the companion is the
  * user's, its path personal. A refusal is shown in place.
@@ -75,8 +75,8 @@ export function RepoCompanionRow({
         </div>
       </div>
       <p className="text-tiny tracking-tiny text-text-passive">
-        A repository {repoAlias} sits in on this machine. New lanes also get a worktree of it, with
-        their checkout inside, and their agents start at its root.
+        The repository that contains {repoAlias} on this machine. New lanes also get a worktree of
+        it, with their checkout inside, and their agents start at its root.
       </p>
 
       {draft !== null ? (
