@@ -8,6 +8,7 @@ import {
   removeGitFixture,
 } from '@main/core/git/_testing/git-remote-fixture';
 import {
+  checkCompanionRemovable,
   companionRepoSchema,
   provisionCompanionCheckout,
   removeCompanionCheckout,
@@ -226,5 +227,32 @@ describe('companion checkouts', () => {
     expect(companionRepoSchema.safeParse({ path: abs, appFolder: 'app', extra: 1 }).success).toBe(
       false
     );
+  });
+
+  // Found by the verify-run P1 test: for a lane at apps/web in a companion that ignores /apps/,
+  // git reports `!! apps/` as one entry, which read as the user's and refused every removal.
+  it('looks inside an ignored parent of a nested lane folder, counting only what is beside it', async () => {
+    fs.writeFileSync(path.join(companion.path, '.gitignore'), '/apps/\n');
+    await git(['commit', '-am', 'ignore apps'], companion.path);
+    const nested = { ...companion, appFolder: 'apps/web' };
+    const made = await provisionCompanionCheckout({
+      companion: nested,
+      poolPath: pool,
+      slug: 'login',
+      laneBranch: 'feat/login',
+    });
+    if (!made.success) throw new Error(made.error.message);
+    await git(['worktree', 'add', '-b', 'feat/login', made.data.appPath], appRepo);
+    const companionPath = made.data.companionPath;
+    expect(await checkCompanionRemovable({ companion: nested, companionPath })).toEqual({
+      success: true,
+      data: undefined,
+    });
+
+    fs.writeFileSync(path.join(companionPath, 'apps', 'other.env'), 'TOKEN=local\n');
+    expect(await checkCompanionRemovable({ companion: nested, companionPath })).toMatchObject({
+      success: false,
+      error: { type: 'companion_has_changes', message: expect.stringContaining('apps/other.env') },
+    });
   });
 });

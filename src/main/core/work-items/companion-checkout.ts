@@ -1,4 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import z from 'zod';
 import { err, ok, type Result } from '@shared/result';
@@ -209,6 +210,24 @@ export async function provisionCompanionCheckout(args: {
 }
 
 /**
+ * What the companion folder `folder` (a parent of the lane's, `appPrefix`)
+ * holds besides the lane's folder, as companion-relative paths.
+ */
+async function entriesBeside(root: string, folder: string, appPrefix: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(path.join(root, folder), { withFileTypes: true })) {
+    const relative = `${folder}${entry.name}${entry.isDirectory() ? '/' : ''}`;
+    if (relative === appPrefix) continue;
+    if (entry.isDirectory() && appPrefix.startsWith(relative)) {
+      found.push(...(await entriesBeside(root, relative, appPrefix)));
+    } else {
+      found.push(relative);
+    }
+  }
+  return found;
+}
+
+/**
  * Refuses a companion checkout holding anything a removal would lose: changes,
  * untracked files, and ignored ones too, because `git worktree remove` deletes
  * ignored files with the folder, and a companion's ignored files (local state,
@@ -221,9 +240,17 @@ export async function checkCompanionRemovable(args: {
 }): Promise<Result<void, CompanionCheckoutError>> {
   try {
     const appPrefix = `${args.companion.appFolder.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
-    const leftovers = (await statusPaths(args.companionPath)).filter(
-      (file) => !file.startsWith(appPrefix)
-    );
+    const leftovers: string[] = [];
+    for (const file of await statusPaths(args.companionPath)) {
+      if (file.startsWith(appPrefix)) continue;
+      // Git reports an ignored folder the lane's sits in (`apps/` for `apps/web`) as one entry:
+      // what counts is what it holds besides the lane's folder.
+      if (file.endsWith('/') && appPrefix.startsWith(file)) {
+        leftovers.push(...(await entriesBeside(args.companionPath, file, appPrefix)));
+      } else {
+        leftovers.push(file);
+      }
+    }
     if (leftovers.length === 0) return ok();
     return err({
       type: 'companion_has_changes',

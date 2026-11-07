@@ -194,4 +194,49 @@ describe('a lane nested in a companion worktree', () => {
     expect(existsSync(companionPath)).toBe(false);
     expect(existsSync(lane)).toBe(false);
   });
+
+  // verify-run P1 (a3687d8): when the lane checkout's restore throws rather than refuses, the
+  // companion worktree it had just made back is undone too, so the next Restore is not stuck.
+  it('undoes the restored companion worktree when the lane checkout throws, and rethrows', async () => {
+    // A lane nested deeper, at apps/web, which the companion ignores.
+    writeFileSync(path.join(companionRepo, '.gitignore'), '/app/\n/apps/\n');
+    await git(['commit', '-am', 'ignore apps'], companionRepo);
+    const made = await provisionCompanionCheckout({
+      companion: { path: companionRepo, appFolder: 'apps/web' },
+      poolPath: path.join(repo.root, 'pool'),
+      slug: 'n',
+      laneBranch: 'chord/n',
+    });
+    if (!made.success) throw new Error(made.error.message);
+    const nested = made.data.appPath;
+    await git(['worktree', 'add', '-b', 'chord/n', nested, 'main'], repo.repoDir);
+    db.insert(workItemWorktrees)
+      .values({
+        id: 'lane-n',
+        workItemId: 'item-c',
+        path: nested,
+        branchName: 'chord/n',
+        isPrimary: 0,
+        targetRef: 'main',
+        setupStatus: 'ok',
+        companionPath: made.data.companionPath,
+        companionRepoPath: companionRepo,
+      })
+      .run();
+    expect((await archiveWorktree('lane-n')).success).toBe(true);
+    // Meanwhile the companion branch gained a file named apps, where the lane's folder must go.
+    const scratch = path.join(repo.root, 'scratch');
+    await git(['worktree', 'add', scratch, 'companion/chord/n'], companionRepo);
+    writeFileSync(path.join(scratch, 'apps'), 'a file, not a folder\n');
+    await git(['add', '-f', 'apps'], scratch);
+    await git(['commit', '-m', 'apps file'], scratch);
+    await git(['worktree', 'remove', scratch], companionRepo);
+
+    await expect(restoreWorktree('lane-n')).rejects.toMatchObject({ syscall: 'mkdir' });
+    expect(existsSync(made.data.companionPath)).toBe(false);
+    expect(readLaneRow('lane-n').archivedAt).not.toBeNull();
+    // Not stuck on path_exists: a second Restore fails the same way, and leaves nothing either.
+    await expect(restoreWorktree('lane-n')).rejects.toMatchObject({ syscall: 'mkdir' });
+    expect(existsSync(made.data.companionPath)).toBe(false);
+  });
 });

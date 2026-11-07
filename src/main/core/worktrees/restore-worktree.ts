@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { err, ok, type Result } from '@shared/result';
 import type { Worktree } from '@shared/worktrees';
 import { restoreCheckpointCommit } from '@main/core/checkpoints/checkpoint-git';
+import { rethrowAfterRollback } from '@main/core/work-items/rethrow-after-rollback';
 import {
   restoreLaneCompanion,
   type LaneCompanionRestoreError,
@@ -82,7 +83,9 @@ export async function restoreWorktree(
   }
   const companion = await restoreLaneCompanion(row, row.branchName);
   if (!companion.success) return err(companion.error);
-  const refused = await restoreLaneCheckout(repoPath, row.path, row.branchName);
+  const refused = await restoreLaneCheckout(repoPath, row.path, row.branchName).catch(
+    (error: unknown) => rethrowAfterRollback(error, companion.data)
+  );
   if (refused) {
     await companion.data();
     return err(refused);
