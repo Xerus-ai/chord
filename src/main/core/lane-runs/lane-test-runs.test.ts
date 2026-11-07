@@ -30,9 +30,7 @@ import { runLaneTest, startLaneRun } from './start-lane-run';
  */
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-vi.mock('@main/lib/events', () => ({
-  events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const ITEM_ID = 'item-1';
 const LANE_ID = 'lane-1';

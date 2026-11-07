@@ -37,9 +37,7 @@ import { readSoloState } from './solo-state';
  */
 vi.mock('electron', () => import('@main/core/account/_testing/test-keychain-electron'));
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
-vi.mock('@main/lib/events', () => ({
-  events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 /** item-a: primary lane-a, secondary lane-a2; item-b: primary lane-b, secondary lane-b2. */
 const LANES = [

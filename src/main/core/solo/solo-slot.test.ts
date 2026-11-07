@@ -11,6 +11,7 @@ import {
 } from '@main/core/lane-runs/_testing/lane-run-fixture';
 import { isRunning } from '@main/core/lane-runs/_testing/run-process';
 import { readLaneRunState } from '@main/core/lane-runs/lane-run-registry';
+import { emitted } from '@main/lib/_stand-ins/renderer-events';
 import {
   addSoloLane,
   branchOf,
@@ -42,15 +43,7 @@ import { readSoloState } from './solo-state';
  */
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-const emitted = vi.hoisted(() => [] as { channel: string; payload: unknown }[]);
-vi.mock('@main/lib/events', () => ({
-  events: {
-    emit: (channel: { name: string }, payload: unknown) =>
-      emitted.push({ channel: channel.name, payload }),
-    on: () => () => {},
-    once: () => () => {},
-  },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const LANES = ['lane-a', 'lane-b', 'lane-c'] as const;
 const [A, B, C] = LANES;

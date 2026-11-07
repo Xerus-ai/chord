@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { laneRunChangedChannel } from '@shared/events/laneRunEvents';
 import { db } from '@main/db/client';
 import { workItemWorktrees } from '@main/db/schema-work-items';
+import { emitted } from '@main/lib/_stand-ins/renderer-events';
 import {
   addLane,
   approveLaneAsIs,
@@ -33,16 +34,7 @@ import { restartLaneRun, startLaneRun } from './start-lane-run';
  */
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-const emitted = vi.hoisted(() => [] as { channel: string; payload: unknown }[]);
-vi.mock('@main/lib/events', () => ({
-  events: {
-    emit: (channel: { name: string }, payload: unknown) =>
-      emitted.push({ channel: channel.name, payload }),
-    // Main's adapter only hears what the renderer sends; nothing does here.
-    on: () => () => {},
-    once: () => () => {},
-  },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const ITEM_ID = 'item-1';
 const SECOND_ITEM_ID = 'item-2';

@@ -20,9 +20,7 @@ import { restartSoloRun, runSoloTest } from './solo-runs';
  */
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-vi.mock('@main/lib/events', () => ({
-  events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const LANES = ['lane-a', 'lane-b', 'lane-c'] as const;
 const [A, B, C] = LANES;

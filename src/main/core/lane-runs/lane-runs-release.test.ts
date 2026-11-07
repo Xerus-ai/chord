@@ -15,9 +15,7 @@ import { isRunning } from './_testing/run-process';
  */
 vi.mock('electron', () => import('@main/core/account/_testing/test-keychain-electron'));
 vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
-vi.mock('@main/lib/events', () => ({
-  events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const fixture = await import('./_testing/lane-run-fixture');
 const { tearDownLaneRepo } = await import('./_testing/lane-run-suite');
