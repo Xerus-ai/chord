@@ -1,0 +1,15 @@
+// The entries knip cannot infer, beside its defaults and its plugins' (vite, vitest, eslint,
+// GitHub Actions, package.json scripts). Without them their imports read as unused
+// dependencies: docx-preview and recharts, jszip, s3mini (devstation-4x42.180).
+{
+  "entry": [
+    "{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+    "src/{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+    // The artifact-page runtime: esbuild bundles these in scripts/artifact-runtime/artifact-runtime-plugin.mjs.
+    "src/artifact-runtime/{runtime-entry,chord-page,mermaid-standalone-entry,docx-viewer-entry}.ts",
+    // E2E suites, run as `node scripts/e2e/<suite>.mjs`.
+    "scripts/e2e/*.mjs",
+    // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
+    "scripts/release/*.ts",
+  ],
+}
