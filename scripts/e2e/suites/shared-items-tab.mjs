@@ -21,7 +21,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { E2E_SHOTS_DIR } from '../lib/experience/run-record.mjs';
-import { createScratchRepo, deleteWorkItemFromCloud, removeScratchRepo } from '../lib/run-scratch.mjs';
+import {
+  createScratchRepo,
+  deleteWorkItemFromCloud,
+  removeScratchRepo,
+} from '../lib/run-scratch.mjs';
 import { launchSeededApp, ROOT } from '../lib/seeded-app.mjs';
 import { checkComments, COMMENT_FIXTURES } from '../lib/shared-items-comments.mjs';
 import { checkRail } from '../lib/shared-items-rail.mjs';

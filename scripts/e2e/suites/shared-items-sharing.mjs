@@ -64,7 +64,10 @@ import { runTeammateItemChatChecks } from '../lib/sharing/teammate-item-chat-che
 import { runTeammateMentionChecks } from '../lib/sharing/teammate-mention-checks.mjs';
 import { runTeammatePresenceChecks } from '../lib/sharing/teammate-presence-checks.mjs';
 import { findFrameWith, followLink, SHOT_DIR } from '../lib/sharing/teammate-ui-helpers.mjs';
-import { runScopedViewChecks, runTeammateViewChecks } from '../lib/sharing/teammate-view-checks.mjs';
+import {
+  runScopedViewChecks,
+  runTeammateViewChecks,
+} from '../lib/sharing/teammate-view-checks.mjs';
 import { publishPrototypeFromApp } from '../lib/sharing/viewing-checks.mjs';
 
 const AUTHOR_PROFILE = process.env.CHORD_E2E_AUTHOR_PROFILE ?? 'chord-b';

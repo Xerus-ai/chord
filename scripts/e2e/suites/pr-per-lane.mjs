@@ -32,7 +32,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { checkRealPrs, cloneGitHubRepo, closeRunPrs } from '../lib/pr-per-lane-github.mjs';
-import { checkFormFollowsLane, checkNoRemoteRefusal, createReport } from '../lib/pr-per-lane-ui.mjs';
+import {
+  checkFormFollowsLane,
+  checkNoRemoteRefusal,
+  createReport,
+} from '../lib/pr-per-lane-ui.mjs';
 import { assertServerHealthy, launchAccount, waitFor } from '../lib/sharing/sharing-accounts.mjs';
 
 const report = createReport('pr-per-lane');

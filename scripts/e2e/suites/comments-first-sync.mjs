@@ -11,7 +11,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { E2E_SHOTS_DIR } from '../lib/experience/run-record.mjs';
-import { createScratchRepo, deleteWorkItemFromCloud, removeScratchRepo } from '../lib/run-scratch.mjs';
+import {
+  createScratchRepo,
+  deleteWorkItemFromCloud,
+  removeScratchRepo,
+} from '../lib/run-scratch.mjs';
 import { launchSeededApp, ROOT } from '../lib/seeded-app.mjs';
 
 const OUT = E2E_SHOTS_DIR;

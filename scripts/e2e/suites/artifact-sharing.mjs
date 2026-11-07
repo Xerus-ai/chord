@@ -24,7 +24,11 @@
  * is reported and fails the run. Exits non-zero on any failure.
  */
 import 'dotenv/config';
-import { runSeatCheck, runTeamAccessCheck, runWorkItemChecks } from '../lib/sharing/access-checks.mjs';
+import {
+  runSeatCheck,
+  runTeamAccessCheck,
+  runWorkItemChecks,
+} from '../lib/sharing/access-checks.mjs';
 import { runViewWarningToastCheck } from '../lib/sharing/author-ui-checks.mjs';
 import { publishFormatsFromApp, runFormatApiChecks } from '../lib/sharing/format-checks.mjs';
 import { assertServerHealthy, launchAccount } from '../lib/sharing/sharing-accounts.mjs';
