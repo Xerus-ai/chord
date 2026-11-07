@@ -135,13 +135,35 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
     }
   });
 
+  // devstation-4x42.181: an Electron bump is a few package.json lines and the lockfile; a dependency
+  // or runtime upgrade is high by its path, root or nested, whatever its size.
+  it('a PR changing a dependency manifest or the runtime pin is high tier', () => {
+    for (const [filename, glob] of [
+      ['package.json', '**/package.json'],
+      ['server/package.json', '**/package.json'],
+      ['packages/protocol/package.json', '**/package.json'],
+      ['pnpm-lock.yaml', '**/pnpm-lock.yaml'],
+      ['pnpm-workspace.yaml', '**/pnpm-workspace.yaml'],
+      ['.npmrc', '**/.npmrc'],
+      ['.nvmrc', '**/.nvmrc'],
+    ]) {
+      const r = decide(pr(), [tierLow, approve], green, [{ filename, changes: 1 }]);
+      expect(r, filename).toEqual({
+        action: 'none',
+        reason: waitsForPermit(`${glob} matched ${filename}`),
+      });
+    }
+  });
+
   it('more than max_changed_lines counted lines is high tier', () => {
     const { max_changed_lines: max } = JSON.parse(readFileSync(TIERS, 'utf8'));
     const lines = (n: number): File[] => [{ filename: 'src/renderer/a.tsx', changes: n }];
     expect(decide(pr(), [tierLow, approve], green, lines(max)).action).toBe('enable');
-    // The lockfile is not counted.
+    // The lockfile's lines are not counted; its path alone makes the PR high (devstation-4x42.181).
     const lock: File[] = [...lines(max), { filename: 'pnpm-lock.yaml', changes: max * 4 }];
-    expect(decide(pr({ changedFiles: 2 }), [tierLow, approve], green, lock).action).toBe('enable');
+    expect(decide(pr({ changedFiles: 2 }), [tierLow, approve], green, lock).reason).toBe(
+      waitsForPermit('**/pnpm-lock.yaml matched pnpm-lock.yaml')
+    );
     expect(decide(pr(), [tierLow, approve], green, lines(max + 1)).reason).toBe(
       waitsForPermit(`${max + 1} counted lines changed, more than max_changed_lines ${max}`)
     );
