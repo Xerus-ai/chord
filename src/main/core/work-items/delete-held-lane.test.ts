@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { removeDirSync } from '@main/lib/remove-dir-sync';
 
 /**
@@ -64,12 +64,39 @@ beforeEach(async () => {
 });
 
 describe('deleting a work item whose lane a process still holds', () => {
+  let holder: ChildProcess | null = null;
+
+  afterEach(() => {
+    holder?.kill();
+    holder = null;
+  });
+
   it('removes the checkout folder once the holder lets go, not just its files', async () => {
-    const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { cwd: lane });
-    await new Promise((resolve) => holder.once('spawn', resolve));
+    // Alive until the test lets it go: never before git's first attempt has run.
+    const held = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: lane });
+    holder = held;
+    await new Promise((resolve) => held.once('spawn', resolve));
 
-    expect(await deleteWorkItem(ITEM_ID)).toEqual({ success: true, data: undefined });
+    let settled = false;
+    const deletion = deleteWorkItem(ITEM_ID).finally(() => {
+      settled = true;
+    });
+    // git's first attempt is over once its admin folder is gone: git deletes it only after it
+    // tried the checkout folder. Letting go earlier would let that attempt itself succeed.
+    const admin = path.join(scratch.repo, '.git', 'worktrees', `held-${run}`);
+    await vi.waitFor(() => expect(settled || !existsSync(admin)).toBe(true), {
+      timeout: 8_000,
+      interval: 25,
+    });
+    // On Windows the holder keeps the emptied folder while the removal waits out the hold.
+    const folderHeld = existsSync(lane);
+    const exited = new Promise((resolve) => held.once('exit', resolve));
+    held.kill();
+    await exited;
 
+    expect(await deletion).toEqual({ success: true, data: undefined });
+
+    if (process.platform === 'win32') expect(folderHeld).toBe(true);
     expect(existsSync(lane)).toBe(false);
     expect(listGitWorktrees(scratch.repo)).not.toContain(`held-${run}`);
   }, 30_000);
