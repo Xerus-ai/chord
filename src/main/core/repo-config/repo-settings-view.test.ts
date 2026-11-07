@@ -261,6 +261,56 @@ describe('repository page reads', () => {
       expect(changed.alwaysTrustedMatchesCurrent).toBe(false);
     });
 
+    // devstation-4x42.257: a lane of a repository with a companion starts its
+    // sessions at the companion's worktree (laneSessionCwd), so the gate asks
+    // about the companion's Claude config, as its main checkout's HEAD has it
+    // (a new companion worktree forks from there), never the repository's.
+    it("describes the companion's Claude config for a repository with a companion", async () => {
+      await commit({
+        '.chord.json': JSON.stringify({ scripts: { setup: 'pnpm i' } }),
+        '.mcp.json': JSON.stringify({ mcpServers: { db: { command: 'node' } } }),
+      });
+      const companionDir = path.join(root, 'companion');
+      fs.mkdirSync(companionDir);
+      await git(['init', '-q', '-b', 'main'], companionDir);
+      fs.writeFileSync(
+        path.join(companionDir, '.mcp.json'),
+        JSON.stringify({ mcpServers: { notes: { command: 'notes-mcp' } } })
+      );
+      await git(['add', '.mcp.json'], companionDir);
+      await git(
+        ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'mcp'],
+        companionDir
+      );
+      // Not committed: a new companion worktree would not have it.
+      fs.mkdirSync(path.join(companionDir, '.claude'));
+      fs.writeFileSync(
+        path.join(companionDir, '.claude', 'settings.json'),
+        JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'x' }] }] } })
+      );
+      db.insert(repoSettings)
+        .values({
+          repoId: REPO_ID,
+          overrides: JSON.stringify({ companionRepo: { path: companionDir, appFolder: 'app' } }),
+        })
+        .run();
+      const companionContent = {
+        chord: { setup: 'pnpm i' },
+        claude: { mcpServers: { notes: { command: 'notes-mcp' } } },
+      };
+      recordRepoApproval({
+        repoId: REPO_ID,
+        hash: 'h',
+        content: companionContent,
+        remoteUrl: REMOTE_URL,
+      });
+
+      const view = await readRepoTrustView(REPO_ID, { baseRef: 'main' });
+
+      expect(view.current).toEqual(companionContent);
+      expect(view.alwaysTrustedMatchesCurrent).toBe(true);
+    });
+
     it('returns the parse error for an invalid team file, not a bundle', async () => {
       await commit({ '.chord.json': '{ "scripts": ' });
       const view = await readRepoTrustView(REPO_ID, { baseRef: 'main' });

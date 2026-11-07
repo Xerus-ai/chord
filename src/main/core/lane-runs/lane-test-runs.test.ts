@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LANE_PORT_BLOCK_SIZE } from '@main/core/worktrees/lane-env';
-import { db } from '@main/db/client';
-import { repos, workItems } from '@main/db/schema-work-items';
 import {
   addLane,
   answer,
@@ -13,13 +11,13 @@ import {
   insertRepoAndItems,
   neverAsk,
   readLaneRow,
-  removeLaneRepo,
   setJustMeScripts,
   waitForRunProcess,
   type LaneRepo,
 } from './_testing/lane-run-fixture';
+import { tearDownLaneRepo } from './_testing/lane-run-suite';
 import { isRunning } from './_testing/run-process';
-import { readLaneRunState, releaseLaneRuns, stopLaneTest } from './lane-run-registry';
+import { readLaneRunState, stopLaneTest } from './lane-run-registry';
 import { readLaneRunView } from './read-lane-run-view';
 import { runLaneTest, startLaneRun } from './start-lane-run';
 
@@ -30,14 +28,9 @@ import { runLaneTest, startLaneRun } from './start-lane-run';
  * their own (just-me) scripts never are. Real processes, real lanes, real
  * approvals; only the database and the IPC emitter are substituted.
  */
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-vi.mock('@main/lib/events', () => ({
-  events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const ITEM_ID = 'item-1';
 const LANE_ID = 'lane-1';
@@ -58,12 +51,7 @@ describe('lane test runs and the Run tab', () => {
     insertRepoAndItems(repo.repoDir, [ITEM_ID]);
   });
 
-  afterEach(async () => {
-    await releaseLaneRuns(LANE_ID);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await removeLaneRepo(repo);
-  });
+  afterEach(() => tearDownLaneRepo(repo, [LANE_ID]));
 
   it('reports a test that exits 0 as passed, with its duration', async () => {
     await createLane({ scripts: { test: 'node scripts/exit.cjs 0' } });

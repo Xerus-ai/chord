@@ -176,6 +176,20 @@ export interface RepoTrustView {
   approvedLaneCount: number;
 }
 
+/**
+ * The Claude config a new lane's sessions would load: the repository's at the
+ * base, or for a repository with a companion the companion's, where those
+ * sessions start (`laneSessionCwd`), as committed at the companion main
+ * checkout's HEAD, the commit a new companion worktree forks from
+ * (`companion-checkout.ts`). The same config the lane gate asks about.
+ */
+async function readNewLaneClaudeConfig(repoId: string, repoPath: string, baseRef: string) {
+  const companion = readJustMeSettings(repoId).companionRepo;
+  return companion
+    ? await readClaudeExecutableConfigAtRef(companion.path, 'HEAD')
+    : await readClaudeExecutableConfigAtRef(repoPath, baseRef);
+}
+
 async function readCurrentBundle(
   repoId: string,
   repoPath: string,
@@ -184,7 +198,7 @@ async function readCurrentBundle(
   const config = await resolveRepoConfig({ repoId, repoPath, ref: baseRef });
   const current = buildExecutableBundle(
     collectChordScripts(config),
-    await readClaudeExecutableConfigAtRef(repoPath, baseRef)
+    await readNewLaneClaudeConfig(repoId, repoPath, baseRef)
   );
   return { current, remote: config.remote.value };
 }
