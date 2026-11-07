@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,10 +56,26 @@ function filesSince(dir, extension, since) {
     .map((name) => `${folder}/${name}`);
 }
 
+/**
+ * The run's start on the file system's clock. A file's mtime comes from the kernel's coarse
+ * clock, which on Linux can lag Date.now() by a few milliseconds, so a screenshot written right
+ * after the start could read as older than a Date.now() start and drop out of the record. A
+ * file stamped at the start carries the same clock as the files the run writes.
+ */
+function fileClockNow(name) {
+  mkdirSync(E2E_RUNS_DIR, { recursive: true });
+  const stamp = join(E2E_RUNS_DIR, `.${name}.start`);
+  writeFileSync(stamp, '');
+  const { mtimeMs } = statSync(stamp);
+  unlinkSync(stamp);
+  return mtimeMs;
+}
+
 export function recordRunOnExit() {
   if (startedAt !== null) return;
   startedAt = Date.now();
   const suite = basename(process.argv[1] ?? 'unknown', '.mjs');
+  const since = fileClockNow(`${suite}-${startedAt}`);
   process.on('exit', (code) => {
     const name = `${suite}-${startedAt}`;
     mkdirSync(E2E_RUNS_DIR, { recursive: true });
@@ -71,8 +87,8 @@ export function recordRunOnExit() {
           started_at: new Date(startedAt).toISOString(),
           finished_at: new Date().toISOString(),
           exit_code: process.exitCode ?? code,
-          screenshots: filesSince(E2E_SHOTS_DIR, '.png', startedAt),
-          videos: filesSince(E2E_VIDEO_DIR, '.webm', startedAt),
+          screenshots: filesSince(E2E_SHOTS_DIR, '.png', since),
+          videos: filesSince(E2E_VIDEO_DIR, '.webm', since),
           review: `runs/${name}.review.md`,
         },
         null,
