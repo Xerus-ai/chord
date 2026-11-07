@@ -21,7 +21,6 @@ import {
   type LanePlacement,
 } from './lane-checkout-placement';
 
-export { allocateSlug, branchCheckedOutError } from './lane-checkout-placement';
 
 /**
  * The git half of creating a lane: resolve where it forks from, create the
