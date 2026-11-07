@@ -5,6 +5,7 @@ import { err, ok, type Result } from '@shared/result';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { findBranchCheckout } from '@main/core/projects/worktrees/find-branch-checkout';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
+import { removeHeldWorktree } from './remove-held-worktree';
 
 /**
  * A companion repository wraps a repository's checkouts: the repository sits
@@ -257,7 +258,11 @@ export async function removeCompanionCheckout(args: {
   const removable = await checkCompanionRemovable(args);
   if (!removable.success) return removable;
   try {
-    await git(args.companion.path, ['worktree', 'remove', args.companionPath]);
+    await removeHeldWorktree({
+      repoPath: args.companion.path,
+      worktreePath: args.companionPath,
+      force: false,
+    });
     return ok();
   } catch (error) {
     return err(gitFailed('Removing the companion checkout', error));

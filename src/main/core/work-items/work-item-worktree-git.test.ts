@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -129,4 +130,25 @@ describe('removeWorkItemWorktree', () => {
     await expect(removeWorkItemWorktree(plainDir)).resolves.toBeUndefined();
     expect(fs.existsSync(plainDir)).toBe(true);
   });
+
+  // e2e companion-repo (devstation-4x42.243): deleted right after its view closed, a lane's
+  // checkout was still held for a moment, `git worktree remove` failed "Permission denied" on
+  // Windows, and the checkout stayed. A process whose cwd is in the checkout is that hold.
+  it.runIf(process.platform === 'win32')(
+    'removes a checkout a process holds for a moment, once it lets go',
+    async () => {
+      const worktreePath = path.join(poolDir, 'held-c5d');
+      await git(['worktree', 'add', worktreePath, '-b', 'chord/held-c5d'], repoDir);
+      const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], {
+        cwd: worktreePath,
+        stdio: 'ignore',
+      });
+      await new Promise((resolve) => holder.once('spawn', resolve));
+
+      await removeWorkItemWorktree(worktreePath);
+
+      expect(fs.existsSync(worktreePath)).toBe(false);
+      expect(await git(['worktree', 'list', '--porcelain'], repoDir)).not.toContain('held-c5d');
+    }
+  );
 });

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -135,6 +136,27 @@ describe('a lane nested in a companion worktree', () => {
     expect(await companionWorktrees()).not.toContain('pool/c');
     expect(readLaneRow('lane-c').archivedAt).not.toBeNull();
   });
+
+  // e2e companion-repo run 1: on Windows the lane's removal can leave its folder behind, empty,
+  // which read as the lane checkout still nested in the companion and kept the companion.
+  // e2e companion-repo: right after the lane's view closed, its folders were still held for a
+  // moment, and on Windows the removal failed "Permission denied" and kept the companion.
+  it.runIf(process.platform === 'win32')(
+    'deletes the lane and its companion once a brief hold on the companion lets go',
+    async () => {
+      const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], {
+        cwd: companionPath,
+        stdio: 'ignore',
+      });
+      await new Promise((resolve) => holder.once('spawn', resolve));
+
+      const result = await deleteWorktree('lane-c');
+
+      expect(result.success).toBe(true);
+      expect(existsSync(companionPath)).toBe(false);
+      expect(await companionWorktrees()).not.toContain('pool/c');
+    }
+  );
 
   it('deletes with its companion worktree', async () => {
     const result = await deleteWorktree('lane-c');

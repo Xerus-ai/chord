@@ -12,6 +12,7 @@ import {
   removeCompanionCheckout,
   type CompanionRepo,
 } from './companion-checkout';
+import { removeHeldWorktree } from './remove-held-worktree';
 
 /**
  * The git-level half of per-work-item worktrees: naming a branch and releasing a
@@ -80,15 +81,14 @@ export async function resolveMainRepoPath(worktreePath: string): Promise<string>
  * commits do — and this repo still has no remote to have pushed them to.
  *
  * `--force` because the work item is being deleted on purpose and its worktree
- * will normally hold uncommitted or untracked files.
+ * will normally hold uncommitted or untracked files. A brief hold on the folder
+ * (Windows) is waited out (`remove-held-worktree.ts`).
  */
 export async function removeWorkItemWorktree(worktreePath: string): Promise<void> {
   if (!(await isLinkedWorktree(worktreePath))) return;
 
   const mainRepoPath = await resolveMainRepoPath(worktreePath);
-  const ctx = new LocalExecutionContext({ root: mainRepoPath });
-  await ctx.exec(GIT_EXECUTABLE, ['worktree', 'remove', '--force', worktreePath]);
-  await ctx.exec(GIT_EXECUTABLE, ['worktree', 'prune']).catch(() => {});
+  await removeHeldWorktree({ repoPath: mainRepoPath, worktreePath, force: true });
 
   log.info('[work-items] removed worktree', { worktreePath, mainRepoPath });
 }
@@ -121,6 +121,7 @@ function recordedCompanion(
   };
 }
 
+/** The companion half still on disk, which removing the lane takes along. */
 function laneCompanion(lane: LaneCheckoutRow) {
   const paired = recordedCompanion(lane);
   return paired && existsSync(paired.companionPath) ? paired : null;
