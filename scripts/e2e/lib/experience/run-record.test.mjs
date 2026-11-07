@@ -73,7 +73,7 @@ describe('run record output root', () => {
       [
         '--input-type=module',
         '-e',
-        `const r = await import(${JSON.stringify(pathToFileURL(RUN_RECORD).href)}); console.log(JSON.stringify([r.E2E_OUT_DIR, r.E2E_RUNS_DIR, r.E2E_SHOTS_DIR, r.E2E_VIDEO_DIR, r.E2E_PERF_DIR]));`,
+        `const r = await import(${JSON.stringify(pathToFileURL(RUN_RECORD).href)}); console.log(JSON.stringify([r.E2E_OUT_DIR, r.E2E_RUNS_DIR, r.E2E_SHOTS_DIR, r.E2E_VIDEO_DIR, r.E2E_LOGS_DIR, r.E2E_PERF_DIR]));`,
       ],
       { env, encoding: 'utf8' }
     );
@@ -83,6 +83,7 @@ describe('run record output root', () => {
       join(out, 'runs'),
       join(out, 'screenshots'),
       join(out, 'videos'),
+      join(out, 'logs'),
       join(out, 'perf'),
     ]);
   });

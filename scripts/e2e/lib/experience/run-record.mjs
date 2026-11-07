@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
  *   runs/<suite>-<start>.json   the run record (and its <same name>.review.md)
  *   screenshots/                every screenshot a suite takes
  *   videos/                     a video per launch, with CHORD_E2E_VIDEO set
+ *   logs/                       a run's console output, when its runner redirects it there
  *   perf/                       the perf benches' results (scripts/perf)
  *   ui-identity/<label>/        the UI identity captures (suites/ui-identity.mjs)
  *
@@ -36,6 +37,8 @@ export const E2E_RUNS_DIR = join(E2E_OUT_DIR, 'runs');
 export const E2E_SHOTS_DIR = join(E2E_OUT_DIR, 'screenshots');
 /** Where a launch records its video when CHORD_E2E_VIDEO is set (`launchSeededApp`). */
 export const E2E_VIDEO_DIR = join(E2E_OUT_DIR, 'videos');
+/** Where a run's console output goes when its runner redirects it (`> "$CHORD_E2E_OUT_DIR/logs/<suite>.log"`). */
+export const E2E_LOGS_DIR = join(E2E_OUT_DIR, 'logs');
 /** Where the perf benches (scripts/perf) append their results. */
 export const E2E_PERF_DIR = join(E2E_OUT_DIR, 'perf');
 
