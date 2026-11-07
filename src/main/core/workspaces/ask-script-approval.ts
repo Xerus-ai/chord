@@ -13,6 +13,8 @@ export interface ScriptApprovalRequest {
   repoPath: string;
   ref: string;
   remoteUrl: string | null;
+  /** The companion worktree the bundle's Claude config comes from; null when it is the checkout's. */
+  claudeSource: string | null;
   bundle: ExecutableBundle;
 }
 
@@ -31,6 +33,7 @@ export const askScriptApproval: AskScriptApproval = async (request) => {
   const answer = await showTrustPromptWindow({
     repoPath: request.repoPath,
     ref: request.ref,
+    claudeSource: request.claudeSource,
     bundle: request.bundle.content,
     previous: readAlwaysTrustedContent(request.repoId),
     shellSetupRuns: process.platform !== 'win32',

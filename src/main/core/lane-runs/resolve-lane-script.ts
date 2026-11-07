@@ -93,6 +93,7 @@ export async function approveLaneScript(
         repoPath: lane.sourcePath,
         ref: lane.targetRef,
         remoteUrl: lane.remoteUrl,
+        claudeSource: lane.claudeSource,
         bundle,
       },
       ask,

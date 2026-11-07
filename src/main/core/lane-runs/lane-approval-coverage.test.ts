@@ -54,6 +54,7 @@ describe("a lane's approval after the user's own script replaces one of the team
       repoPath: lane.sourcePath,
       ref: lane.targetRef,
       remoteUrl: lane.remoteUrl,
+      claudeSource: lane.claudeSource,
       bundle: lane.bundle,
     };
   }

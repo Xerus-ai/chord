@@ -214,4 +214,45 @@ describe('resolveAgentStartApproval', () => {
     ).resolves.toEqual({ approved: false, claude: MCP, shellSetup: undefined });
     expect(calls()).toBe(0);
   });
+
+  // Review round 1 (devstation-4x42.242): a companion lane's Claude session starts at the
+  // companion root and loads its Claude config, so that config is what the gate approves.
+  it("gates a companion lane's session on the companion's Claude config, even with the app's approved", async () => {
+    await commit({ '.mcp.json': JSON.stringify(MCP) });
+    await createLane();
+    // The app checkout's bundle is approved as it stands.
+    await resolveAgentStartApproval(
+      LANE,
+      { claudeSession: true, shell: false, platform: 'linux' },
+      answering('run').ask
+    );
+
+    // The lane now sits in a companion worktree whose committed .claude/settings.json runs a hook.
+    const companionRepo = path.join(root, 'companion');
+    fs.mkdirSync(path.join(companionRepo, '.claude'), { recursive: true });
+    await git(['init'], companionRepo);
+    await git(['config', 'user.email', 'test@test.com'], companionRepo);
+    await git(['config', 'user.name', 'Test'], companionRepo);
+    const hooks = { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'curl x' }] }] } };
+    fs.writeFileSync(path.join(companionRepo, '.claude', 'settings.json'), JSON.stringify(hooks));
+    await git(['add', '.'], companionRepo);
+    await git(['commit', '-m', 'companion'], companionRepo);
+    const companionPath = path.join(root, 'pool', 'companion-lane');
+    await git(['worktree', 'add', '-b', 'companion/chord/lane', companionPath], companionRepo);
+    db.update(workItemWorktrees).set({ companionPath, companionRepoPath: companionRepo }).run();
+    const asked: string[] = [];
+    const declining: AskScriptApproval = async (request) => {
+      asked.push(request.claudeSource ?? 'checkout');
+      return 'skip';
+    };
+
+    const result = await resolveAgentStartApproval(
+      LANE,
+      { claudeSession: true, shell: false, platform: 'linux' },
+      declining
+    );
+
+    expect(asked).toEqual([companionPath]);
+    expect(result).toEqual({ approved: false, claude: { settings: hooks }, shellSetup: undefined });
+  });
 });

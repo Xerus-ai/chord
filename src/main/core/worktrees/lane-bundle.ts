@@ -15,13 +15,16 @@ import {
 import { db } from '@main/db/client';
 import { workItems, type WorkItemWorktreeRow } from '@main/db/schema-work-items';
 import { resolveMainRepoPathForWorkItem } from './repo-path';
-import { findWorktreeRow } from './worktree-lookup';
+import { findWorktreeRow, laneSessionCwd } from './worktree-lookup';
 
 /**
  * What a lane would run, read at the moment it runs: `.chord.json` at the
  * lane's target ref (never the checkout's own copy, which an agent can
- * edit), plus the Claude config in the checkout — as one bundle to approve,
- * holding only what this checkout runs (`selectCheckoutScripts`).
+ * edit), plus the Claude config its sessions load — the checkout's, or for a
+ * lane nested in a companion worktree the companion's, where its sessions
+ * start (`laneSessionCwd`) — as one bundle to approve, holding only what this
+ * checkout runs (`selectCheckoutScripts`). A just-me companion gets no trust
+ * exception: its config is approved like the repository's.
  */
 
 export interface LaneBundle {
@@ -34,6 +37,8 @@ export interface LaneBundle {
   bundle: ExecutableBundle | null;
   /** URL of the remote this lane fetches from; null for a repository with none. */
   remoteUrl: string | null;
+  /** The companion worktree the Claude config was read from; null when it is the checkout's. */
+  claudeSource: string | null;
 }
 
 /** Throws for a lane or work item that does not exist, and on an invalid `.chord.json`. */
@@ -62,7 +67,7 @@ export async function resolveLaneBundle(laneId: string): Promise<LaneBundle> {
   });
   const bundle = buildExecutableBundle(
     selectCheckoutScripts(collectChordScripts(config), row.checkoutOrigin),
-    await readClaudeExecutableConfig(row.path)
+    await readClaudeExecutableConfig(laneSessionCwd(row))
   );
   return {
     row,
@@ -72,5 +77,6 @@ export async function resolveLaneBundle(laneId: string): Promise<LaneBundle> {
     config,
     bundle,
     remoteUrl: await readFetchRemoteUrl(sourcePath, config.remote.value),
+    claudeSource: row.companionPath,
   };
 }
