@@ -194,4 +194,33 @@ describe('forkToNewTab (real DB, git and Agent SDK fork)', () => {
 
     expect(db.select().from(agentSessions).all()).toHaveLength(1);
   });
+
+  // Review round 1 (devstation-4x42.242): a companion lane's chat runs at the companion root;
+  // the new tab forks the conversation kept there, and runs there too.
+  it("forks a companion lane's conversation at its companion root, and opens the tab there", async () => {
+    const companion = realpathSync(mkdtempSync(join(tmpdir(), 'chord-fork-tab-companion-')));
+    try {
+      db.update(workItemWorktrees)
+        .set({ companionPath: companion, companionRepoPath: companion })
+        .where(eq(workItemWorktrees.id, WORKTREE_ID))
+        .run();
+      rmSync(resolveClaudeTranscriptPath(repo, CLAUDE_SESSION_ID) as string);
+      seedClaudeTranscript(claudeConfigDir, companion);
+
+      const result = await forkToNewTab({ workItemId: WORK_ITEM_ID, turnId: 'turn-1' });
+      if (!result.success) throw new Error(`fork refused: ${result.error.type}`);
+
+      const [tab] = db
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.id, result.data.sessionId))
+        .all();
+      expect(tab.cwd).toBe(companion);
+      expect(
+        resolveClaudeTranscriptPath(companion, tab.externalSessionId as string)
+      ).not.toBeNull();
+    } finally {
+      removeDirSync(companion);
+    }
+  });
 });

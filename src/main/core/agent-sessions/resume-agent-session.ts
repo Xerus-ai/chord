@@ -16,6 +16,15 @@ import { db } from '@main/db/client';
 import { agentSessions, workItems } from '@main/db/schema-work-items';
 
 /**
+ * Where a session resumes: the cwd it recorded, else where its work item's
+ * primary lane starts sessions (`laneSessionCwd`: a companion lane's
+ * companion root, where its conversation is kept).
+ */
+export function resolveResumeCwd(row: { cwd: string | null; workItemId: string }): string {
+  return resolve(row.cwd ?? laneSessionCwd(getPrimaryWorktreeRow(row.workItemId)));
+}
+
+/**
  * Starts a session that is not running, resuming its conversation when it
  * has one; a running session is returned as it is. Used by the session tabs
  * and by Reset to here, which brings the chat back up on its fork.
@@ -41,7 +50,7 @@ export async function resumeAgentSession(sessionId: string) {
     if (worktreeRow?.archivedAt != null) return err({ type: 'worktree_archived' as const });
   }
 
-  const cwd = resolve(row.cwd ?? laneSessionCwd(getPrimaryWorktreeRow(row.workItemId)));
+  const cwd = resolveResumeCwd(row);
 
   if (row.shell) {
     return resumeShellTerminalSession({ ...row, shell: row.shell, cwd });
