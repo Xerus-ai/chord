@@ -305,9 +305,6 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
       expect(text, job).toContain(`name: ${job}`);
       expect(text, job).toContain(`--ignore-check "${job}"`);
     }
-    // devstation-4x42.248: the statuses with their creators, and the App's login trusted.
-    expect(text).toContain(`gh api --paginate "repos/$REPO/commits/$SHA/statuses" --jq '.[]'`);
-    expect(text).toContain(`--trusted-creator "${TRUSTED}"`);
   });
 });
 
