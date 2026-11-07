@@ -15,7 +15,7 @@
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder, with no .chord.json, so no "Run scripts?" window opens. Its work
  * item is deleted in the app, and the suite waits until the cloud no longer
- * has it. Screenshots: screenshots/e2e/left-rail-lanes-*.png.
+ * has it. Screenshots: <e2e out>/screenshots/left-rail-lanes-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';

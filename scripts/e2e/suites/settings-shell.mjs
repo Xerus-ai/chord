@@ -10,7 +10,7 @@
  *
  *   CHORD_E2E_APP_DIR=.e2e-app node scripts/e2e/suites/settings-shell.mjs
  *
- * Screenshots: screenshots/e2e/settings-shell-NN-*.png.
+ * Screenshots: <e2e out>/screenshots/settings-shell-NN-*.png.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

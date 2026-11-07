@@ -3,7 +3,7 @@
  * Check 14 (design 2026-09-24 §9–§10): every format opened from a chord://
  * link in the teammate's own app, with the author's app CLOSED, renders from
  * what the author uploaded. Each format leaves a screenshot in
- * screenshots/e2e.
+ * <e2e out>/screenshots.
  */
 import { waitFor } from './sharing-accounts.mjs';
 import {

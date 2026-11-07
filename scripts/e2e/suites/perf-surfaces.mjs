@@ -13,7 +13,7 @@
  *
  *   CHORD_E2E_APP_DIR=.e2e-app-perf-final CHORD_E2E_VIDEO=1 node scripts/e2e/suites/perf-surfaces.mjs
  *
- * Screenshots: screenshots/e2e/perf-surfaces-*.png.
+ * Screenshots: <e2e out>/screenshots/perf-surfaces-*.png.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

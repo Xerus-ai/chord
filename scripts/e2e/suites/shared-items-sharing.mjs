@@ -44,7 +44,7 @@
  * sends one chat message, addressed to the teammate, which the owner's agent
  * must not answer (7e, sharing/owner-mention-reply-checks.mjs). Everything
  * created is removed at the end; exits non-zero on any failure, a cleanup
- * failure included. Screenshots: screenshots/e2e/shared-share-*.png.
+ * failure included. Screenshots: <e2e out>/screenshots/shared-share-*.png.
  */
 import 'dotenv/config';
 import { mkdirSync } from 'node:fs';

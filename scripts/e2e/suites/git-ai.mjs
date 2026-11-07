@@ -24,7 +24,7 @@
  * is then renamed to a GitHub URL whose pushes go to the bare origin, so Create
  * PR is offered and nothing reaches GitHub. No PR is created. The work item is
  * deleted, the suite waits until the cloud drops it, and gitAi is reset.
- * Screenshots: screenshots/e2e/git-ai-NN-*.png.
+ * Screenshots: <e2e out>/screenshots/git-ai-NN-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';

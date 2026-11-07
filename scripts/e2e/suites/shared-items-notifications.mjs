@@ -22,7 +22,7 @@
  * Seed profiles as in artifact-sharing.mjs (CHORD_E2E_AUTHOR_PROFILE, default
  * `chord-b`; CHORD_E2E_TEAMMATE_PROFILE, default `chord-p1-smoke`). Everything
  * created is removed at the end; exits non-zero on any failure, a cleanup
- * failure included. Screenshots: screenshots/e2e/shared-notify-*.png.
+ * failure included. Screenshots: <e2e out>/screenshots/shared-notify-*.png.
  */
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';

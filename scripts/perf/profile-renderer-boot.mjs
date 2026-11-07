@@ -5,8 +5,9 @@
  *
  *   node scripts/perf/profile-renderer-boot.mjs <appDir> [top=25]
  */
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { E2E_PERF_DIR } from '../e2e/lib/experience/run-record.mjs';
 import { launchSeededApp, ROOT } from '../e2e/lib/seeded-app.mjs';
 
 const appDir = resolve(ROOT, process.argv[2] ?? '.e2e-app');
@@ -29,8 +30,9 @@ try {
     timeout: 60_000,
   });
   const { profile } = await cdp.send('Profiler.stop');
+  mkdirSync(E2E_PERF_DIR, { recursive: true });
   writeFileSync(
-    join(ROOT, '.e2e-runs', 'perf', 'renderer-boot.cpuprofile'),
+    join(E2E_PERF_DIR, 'renderer-boot.cpuprofile'),
     JSON.stringify(profile)
   );
   const byId = new Map(profile.nodes.map((n) => [n.id, n]));

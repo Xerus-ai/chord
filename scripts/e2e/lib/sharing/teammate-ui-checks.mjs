@@ -4,7 +4,7 @@
  * it changes nothing, locally or in the live document; a public link the
  * teammate reaches opens as its tab in the app; the sidebar row of an artifact-only share and the share
  * notification each open their artifact. Each check leaves a screenshot in
- * screenshots/e2e. Check 14 (formats) is teammate-format-checks.mjs.
+ * <e2e out>/screenshots. Check 14 (formats) is teammate-format-checks.mjs.
  */
 import { fetchSignedOut, waitFor } from './sharing-accounts.mjs';
 import { expectStatus, readLinkToken } from './sharing-fixtures.mjs';

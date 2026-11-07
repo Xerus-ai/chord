@@ -19,7 +19,7 @@
  * Two scratch repositories (a bare origin plus a clone each) under the OS temp
  * folder; check 8 uses Codex. The run's work items are deleted in the app and
  * the suite waits until the cloud no longer has them. Screenshots:
- * screenshots/e2e/phase1-*.png.
+ * <e2e out>/screenshots/phase1-*.png.
  */
 import { rmSync } from 'node:fs';
 import {

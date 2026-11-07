@@ -25,7 +25,7 @@
  * `chord-b`; CHORD_E2E_TEAMMATE_PROFILE, default `chord-p1-smoke`). The work
  * item, its chats and its rows are the suite's own and are deleted at the end;
  * exits non-zero on any failure, a cleanup failure included. Screenshots:
- * screenshots/e2e/shared-reveal-*.png.
+ * <e2e out>/screenshots/shared-reveal-*.png.
  */
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';

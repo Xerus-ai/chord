@@ -25,7 +25,7 @@
  *
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder. Its work item is deleted in the app, and the suite waits until the
- * cloud no longer has it. Screenshots: screenshots/e2e/run-and-test-*.png.
+ * cloud no longer has it. Screenshots: <e2e out>/screenshots/run-and-test-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

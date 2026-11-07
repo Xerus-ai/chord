@@ -22,7 +22,7 @@
  * `npm view` for npm agents. The suite never presses Update — that would
  * upgrade this machine's CLIs; the update itself is covered by
  * `src/main/core/dependencies/agent-updater.test.ts` in a temporary npm prefix.
- * Screenshots: screenshots/e2e/agent-updates-NN-*.png.
+ * Screenshots: <e2e out>/screenshots/agent-updates-NN-*.png.
  */
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';

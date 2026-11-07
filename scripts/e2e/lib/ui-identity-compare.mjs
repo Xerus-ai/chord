@@ -11,15 +11,14 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { E2E_SHOTS_DIR } from './experience/run-record.mjs';
-import { ROOT } from './seeded-app.mjs';
+import { E2E_OUT_DIR, E2E_SHOTS_DIR } from './experience/run-record.mjs';
 
 const [labelA, labelB] = process.argv.slice(2);
 if (!labelA || !labelB) {
   throw new Error('Usage: node scripts/e2e/lib/ui-identity-compare.mjs <label-a> <label-b>');
 }
 const statesOf = (label) =>
-  readdirSync(join(ROOT, 'screenshots', 'ui-identity', label))
+  readdirSync(join(E2E_OUT_DIR, 'ui-identity', label))
     .filter((name) => name.endsWith('.json'))
     .sort();
 
@@ -127,7 +126,7 @@ let failed = false;
 try {
   for (const state of statesA) {
     const read = (label) =>
-      JSON.parse(readFileSync(join(ROOT, 'screenshots', 'ui-identity', label, state), 'utf8'));
+      JSON.parse(readFileSync(join(E2E_OUT_DIR, 'ui-identity', label, state), 'utf8'));
     const a = read(labelA);
     const b = read(labelB);
     const differences = compareRecords(a, b);

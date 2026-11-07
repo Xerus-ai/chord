@@ -15,7 +15,7 @@
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder. Its work item is deleted in the app, the suite waits until the cloud
  * no longer has it, and the git setting is reset. Screenshots:
- * screenshots/e2e/git-settings-NN-*.png.
+ * <e2e out>/screenshots/git-settings-NN-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';

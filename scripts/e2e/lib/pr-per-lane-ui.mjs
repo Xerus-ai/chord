@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { E2E_SHOTS_DIR } from './experience/run-record.mjs';
 import { waitFor } from './sharing/sharing-accounts.mjs';
 
-/** Numbered screenshots under screenshots/e2e and PASS/FAIL verdicts. */
+/** Numbered screenshots under <e2e out>/screenshots and PASS/FAIL verdicts. */
 export function createReport(prefix) {
   const shots = E2E_SHOTS_DIR;
   mkdirSync(shots, { recursive: true });

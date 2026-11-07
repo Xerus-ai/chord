@@ -24,7 +24,7 @@
  * (`pr-per-lane-github.mjs`).
  *
  * The work item is deleted in the app, and the suite waits until the cloud no
- * longer has it. Screenshots: screenshots/e2e/pr-per-lane-NN-*.png.
+ * longer has it. Screenshots: <e2e out>/screenshots/pr-per-lane-NN-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

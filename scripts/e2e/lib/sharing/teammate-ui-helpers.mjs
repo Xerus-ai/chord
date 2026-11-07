@@ -3,7 +3,7 @@
  * Driving one account's app in the P6 sharing done-check: following a
  * chord:// link, finding the artifact frame that shows a marker, waiting for
  * Chromium's PDF viewer to actually load a document, and screenshots into
- * screenshots/e2e.
+ * <e2e out>/screenshots.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

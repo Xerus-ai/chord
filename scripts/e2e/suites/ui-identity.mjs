@@ -6,7 +6,7 @@
  *
  * For each state (the shell, a work item with its topbar, tabs and composer,
  * the right rail open, then the same in the light theme) this writes a window
- * screenshot to screenshots/e2e and, to screenshots/ui-identity/<label>/, the
+ * screenshot to <e2e out>/screenshots and, to <e2e out>/ui-identity/<label>/, the
  * computed style and box of every rendered element plus the value of every
  * custom property on the root. Animations, transitions, the caret and the
  * renderer's clock are frozen and the pointer is parked, so two captures of
@@ -17,8 +17,8 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { E2E_SHOTS_DIR } from '../lib/experience/run-record.mjs';
-import { launchSeededApp, ROOT } from '../lib/seeded-app.mjs';
+import { E2E_OUT_DIR, E2E_SHOTS_DIR } from '../lib/experience/run-record.mjs';
+import { launchSeededApp } from '../lib/seeded-app.mjs';
 
 const label = process.argv[2];
 if (!label || !/^[a-z0-9-]+$/.test(label)) {
@@ -26,7 +26,7 @@ if (!label || !/^[a-z0-9-]+$/.test(label)) {
     'Usage: node scripts/e2e/suites/ui-identity.mjs <label> (lower-case letters, digits, -)'
   );
 }
-const STATES_DIR = join(ROOT, 'screenshots', 'ui-identity', label);
+const STATES_DIR = join(E2E_OUT_DIR, 'ui-identity', label);
 mkdirSync(STATES_DIR, { recursive: true });
 mkdirSync(E2E_SHOTS_DIR, { recursive: true });
 

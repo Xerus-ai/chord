@@ -27,7 +27,7 @@
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder. Cleanup brings the compose project down (volumes included), deletes
  * the work items in the app and waits until the cloud no longer has them.
- * Screenshots: screenshots/e2e/solo-docker-*.png.
+ * Screenshots: <e2e out>/screenshots/solo-docker-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

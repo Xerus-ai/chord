@@ -20,7 +20,7 @@
  * Needs the sync server (.env VITE_CLOUD_API_URL) and a signed-in seed
  * profile (CHORD_E2E_PROFILE, default chord-p1-smoke). Uses a scratch
  * repository under the OS temp folder; the work item is deleted in the app at
- * the end. Screenshots: screenshots/e2e/history-<agent>-*.png.
+ * the end. Screenshots: <e2e out>/screenshots/history-<agent>-*.png.
  */
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';

@@ -17,7 +17,7 @@
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder. Its work item is deleted in the app and the suite waits until the
  * cloud no longer has it; the Claude project folder the outside session wrote
- * for the lane is removed. Screenshots: screenshots/e2e/session-import-*.png.
+ * for the lane is removed. Screenshots: <e2e out>/screenshots/session-import-*.png.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomInt } from 'node:crypto';

@@ -28,7 +28,7 @@
  * a marker file. The run's work item is deleted in the app and the suite
  * waits until the cloud no longer has it; the Claude project folder the
  * outside session wrote is removed. Screenshots (and the run record, through
- * `launchSeededApp`): screenshots/e2e/adopt-worktree-*.png.
+ * `launchSeededApp`): <e2e out>/screenshots/adopt-worktree-*.png.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomInt } from 'node:crypto';

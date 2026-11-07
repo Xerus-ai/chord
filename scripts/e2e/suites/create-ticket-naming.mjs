@@ -30,7 +30,7 @@
  *
  * Uses a scratch repository (a bare origin plus a clone) under the OS temp
  * folder. Its work item is deleted in the app, and the suite waits until the
- * cloud no longer has it. Screenshots: screenshots/e2e/create-ticket-naming-*.png.
+ * cloud no longer has it. Screenshots: <e2e out>/screenshots/create-ticket-naming-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';

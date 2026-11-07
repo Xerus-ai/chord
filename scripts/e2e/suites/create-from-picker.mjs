@@ -26,7 +26,7 @@
  * repositories (two bare remotes, two clones) live under the OS temp folder.
  * Every work item the run creates is deleted in the app and the suite waits
  * until the cloud no longer has it. Screenshots:
- * screenshots/e2e/create-from-picker-NN-*.png.
+ * <e2e out>/screenshots/create-from-picker-NN-*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';

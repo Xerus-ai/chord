@@ -151,8 +151,8 @@ export async function launchSeededApp({
     args: target.args,
     cwd: ROOT,
     timeout: 90_000,
-    // CHORD_E2E_VIDEO=1: a video of this launch lands in screenshots/e2e/video and
-    // the run record lists it (the harness proof slot, .command-center/.workflows/harness.json).
+    // CHORD_E2E_VIDEO=1: a video of this launch lands in <e2e out>/videos and
+    // the run record lists it.
     ...(process.env.CHORD_E2E_VIDEO
       ? { recordVideo: { dir: E2E_VIDEO_DIR, size: { width: 1280, height: 800 } } }
       : {}),
