@@ -13,24 +13,17 @@ import { isRunning } from './_testing/run-process';
  * database and the IPC emitter are the substitutes the other worktree
  * suites use.
  */
-vi.mock('electron', async () => {
-  const { electronWithTestKeychain } = await import('@main/core/account/_testing/test-keychain');
-  return electronWithTestKeychain();
-});
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('electron', () => import('@main/core/account/_testing/test-keychain-electron'));
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 vi.mock('@main/lib/events', () => ({
   events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
 }));
 
 const fixture = await import('./_testing/lane-run-fixture');
-const { db } = await import('@main/db/client');
-const { repos, workItems } = await import('@main/db/schema-work-items');
+const { tearDownLaneRepo } = await import('./_testing/lane-run-suite');
 const { acquireWorktreeWorkspace } = await import('@main/core/worktrees/workspace-bridge');
 const { deleteWorktree } = await import('@main/core/worktrees/delete-worktree');
-const { readLaneRunState, releaseLaneRuns } = await import('./lane-run-registry');
+const { readLaneRunState } = await import('./lane-run-registry');
 const { runLaneTest, startLaneRun } = await import('./start-lane-run');
 
 const ITEM_ID = 'item-1';
@@ -65,12 +58,7 @@ describe('deleting a lane with runs', () => {
     await fixture.approveLaneAsIs(SECONDARY_ID);
   });
 
-  afterEach(async () => {
-    await releaseLaneRuns(SECONDARY_ID);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await fixture.removeLaneRepo(repo);
-  });
+  afterEach(() => tearDownLaneRepo(repo, [SECONDARY_ID]));
 
   it('stops its runs and test first, then runs its teardown to its own exit, then removes the checkout', async () => {
     await acquireWorktreeWorkspace(fixture.readLaneRow(SECONDARY_ID));

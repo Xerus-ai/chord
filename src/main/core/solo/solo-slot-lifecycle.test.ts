@@ -1,36 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  insertRepoAndItems,
-  neverAsk,
-  readLaneRow,
-  removeLaneRepo,
-  REPO_ID,
-  type LaneRepo,
-} from '@main/core/lane-runs/_testing/lane-run-fixture';
-import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
-import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { neverAsk, readLaneRow, REPO_ID } from '@main/core/lane-runs/_testing/lane-run-fixture';
+import { isRunning } from '@main/core/lane-runs/_testing/run-process';
+import { readLaneRunState } from '@main/core/lane-runs/lane-run-registry';
 import { deleteWorkItem } from '@main/core/work-items/work-item-crud';
 import { archiveWorktree } from '@main/core/worktrees/archive-worktree';
 import { deleteWorktree } from '@main/core/worktrees/delete-worktree';
 import { db } from '@main/db/client';
-import { repos, workItems } from '@main/db/schema-work-items';
+import { workItems } from '@main/db/schema-work-items';
 import {
-  addSoloLane,
   branchOf,
-  createSoloLaneRepo,
   hashRootFiles,
   headOf,
   sawCtrlC,
-  statusOf,
   waitForRunMark,
 } from './_testing/solo-slot-fixture';
+import { expectRootReturned, holdSoloSlot, useSoloSuite } from './_testing/solo-slot-suite';
 import { acquireSoloHost } from './acquire-solo-host';
 import { readSoloView } from './read-solo-view';
 import { releaseSolo } from './release-solo';
 import { hasSoloHolds, recoverSoloSlotsOnBoot, settleSoloOnQuit } from './solo-boot';
-import { leaveSoloQueue, soloLane } from './solo-lane';
+import { soloLane } from './solo-lane';
 import { readSoloState } from './solo-state';
 
 /**
@@ -44,14 +35,8 @@ import { readSoloState } from './solo-state';
  * keychain, the database and the IPC emitter are the substitutes the other
  * worktree suites use.
  */
-vi.mock('electron', async () => {
-  const { electronWithTestKeychain } = await import('@main/core/account/_testing/test-keychain');
-  return electronWithTestKeychain();
-});
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('electron', () => import('@main/core/account/_testing/test-keychain-electron'));
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 vi.mock('@main/lib/events', () => ({
   events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
 }));
@@ -63,37 +48,15 @@ const LANES = [
   { laneId: 'lane-b', workItemId: 'item-b', dir: 'b', isPrimary: true },
   { laneId: 'lane-b2', workItemId: 'item-b', dir: 'b2', isPrimary: false },
 ] as const;
-const LANE_IDS = LANES.map((lane) => lane.laneId);
 
 describe('the Solo slot across lane and app lifetimes', () => {
-  let repo: LaneRepo;
+  const suite = useSoloSuite('solo-lifecycle-', LANES);
+  const { lanePaths } = suite;
   let root: string;
-  const lanePaths: Record<string, string> = {};
-
-  beforeEach(async () => {
-    repo = await createSoloLaneRepo('solo-lifecycle-');
-    root = repo.repoDir;
-    insertRepoAndItems(root, ['item-a', 'item-b']);
-    for (const lane of LANES) lanePaths[lane.laneId] = await addSoloLane(repo, lane);
+  beforeEach(() => {
+    root = suite.root;
   });
-
-  afterEach(async () => {
-    for (const laneId of LANE_IDS) await leaveSoloQueue(laneId);
-    await releaseSolo({ repoId: REPO_ID }, { discardRootChanges: true }, neverAsk);
-    for (const laneId of LANE_IDS) await releaseLaneRuns(laneId);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await removeLaneRepo(repo);
-  });
-
-  async function holdWith(laneId: string) {
-    const result = await soloLane(laneId, neverAsk);
-    if (!result.success || result.data.status !== 'holding') {
-      throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
-    }
-    const mark = await waitForRunMark(root, laneId);
-    return { ...mark, process: await runProcessOf(mark.pid) };
-  }
+  const holdWith = (laneId: string) => holdSoloSlot(root, laneId);
 
   const queueOf = async () => (await readSoloView(REPO_ID)).queue.map((entry) => entry.laneId);
 
@@ -129,10 +92,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
       expect(result).toEqual({ success: true, data: { workItemId: 'item-a' } });
       expect(sawCtrlC(root, 'lane-a2')).toBe(true);
       expect(await isRunning(mark.process)).toBe(false);
-      expect(hashRootFiles(root)).toEqual(before);
-      expect(await headOf(root)).toBe(head);
-      expect(await branchOf(root)).toBe('main');
-      expect(await statusOf(root)).toBe('');
+      await expectRootReturned(root, before, head);
       expect((await readSoloState(root)).status).toBe('none');
       expect(fs.existsSync(lanePaths['lane-a2'])).toBe(false);
       expect(await readSoloView(REPO_ID)).toMatchObject({ holder: null, queue: [] });
@@ -235,10 +195,7 @@ describe('the Solo slot across lane and app lifetimes', () => {
         success: true,
         data: { releasedLaneId: 'lane-a', handedTo: null },
       });
-      expect(hashRootFiles(root)).toEqual(before);
-      expect(await headOf(root)).toBe(head);
-      expect(await branchOf(root)).toBe('main');
-      expect(await statusOf(root)).toBe('');
+      await expectRootReturned(root, before, head);
       expect(await readSoloView(REPO_ID)).toMatchObject({ holder: null, interrupted: null });
     });
   });

@@ -1,26 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  git,
-  insertRepoAndItems,
-  neverAsk,
-  removeLaneRepo,
-  REPO_ID,
-  samePath,
-  type LaneRepo,
-} from '@main/core/lane-runs/_testing/lane-run-fixture';
-import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
-import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
-import { db } from '@main/db/client';
-import { repos, workItems } from '@main/db/schema-work-items';
-import {
-  addSoloLane,
-  createSoloLaneRepo,
-  headOf,
-  waitForRunMark,
-  waitForTestMark,
-} from './_testing/solo-slot-fixture';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { git, neverAsk, REPO_ID, samePath } from '@main/core/lane-runs/_testing/lane-run-fixture';
+import { isRunning } from '@main/core/lane-runs/_testing/run-process';
+import { readLaneRunState } from '@main/core/lane-runs/lane-run-registry';
+import { headOf, waitForRunMark, waitForTestMark } from './_testing/solo-slot-fixture';
+import { holdSoloSlot, lanesPerItem, useSoloSuite } from './_testing/solo-slot-suite';
 import { readSoloView } from './read-solo-view';
 import { releaseSolo } from './release-solo';
 import { leaveSoloQueue, soloLane, syncSolo } from './solo-lane';
@@ -33,10 +18,7 @@ import { restartSoloRun, runSoloTest } from './solo-runs';
  * queue), and Restart / Run tests acting on the Solo runs in the root. Same
  * substitutes as `solo-slot.test.ts`.
  */
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
 vi.mock('@main/lib/events', () => ({
   events: { emit: () => {}, on: () => () => {}, once: () => () => {} },
@@ -46,37 +28,13 @@ const LANES = ['lane-a', 'lane-b', 'lane-c'] as const;
 const [A, B, C] = LANES;
 
 describe('the Solo slot while held', () => {
-  let repo: LaneRepo;
+  const suite = useSoloSuite('solo-queue-', lanesPerItem(LANES));
+  const { lanePaths } = suite;
   let root: string;
-  const lanePaths: Record<string, string> = {};
-
-  beforeEach(async () => {
-    repo = await createSoloLaneRepo('solo-queue-');
-    root = repo.repoDir;
-    insertRepoAndItems(root, ['item-a', 'item-b', 'item-c']);
-    for (const laneId of LANES) {
-      const dir = laneId.slice('lane-'.length);
-      lanePaths[laneId] = await addSoloLane(repo, { laneId, workItemId: `item-${dir}`, dir });
-    }
+  beforeEach(() => {
+    root = suite.root;
   });
-
-  afterEach(async () => {
-    for (const laneId of LANES) await leaveSoloQueue(laneId);
-    await releaseSolo({ repoId: REPO_ID }, { discardRootChanges: true }, neverAsk);
-    for (const laneId of LANES) await releaseLaneRuns(laneId);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await removeLaneRepo(repo);
-  });
-
-  async function holdWith(laneId: string) {
-    const result = await soloLane(laneId, neverAsk);
-    if (!result.success || result.data.status !== 'holding') {
-      throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
-    }
-    const mark = await waitForRunMark(root, laneId);
-    return { ...mark, process: await runProcessOf(mark.pid) };
-  }
+  const holdWith = (laneId: string) => holdSoloSlot(root, laneId);
 
   it("Sync from lane applies the holder's new commit and edits to the root without stopping its runs", async () => {
     const mark = await holdWith(A);
