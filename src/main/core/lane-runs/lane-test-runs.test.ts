@@ -11,14 +11,14 @@ import {
   commitTeamConfig,
   createLaneRepo,
   insertRepoAndItems,
-  isAlive,
   neverAsk,
   readLaneRow,
   removeLaneRepo,
   setJustMeScripts,
-  waitForPid,
+  waitForRunProcess,
   type LaneRepo,
 } from './_testing/lane-run-fixture';
+import { isRunning } from './_testing/run-process';
 import { readLaneRunState, releaseLaneRuns, stopLaneTest } from './lane-run-registry';
 import { readLaneRunView } from './read-lane-run-view';
 import { runLaneTest, startLaneRun } from './start-lane-run';
@@ -107,7 +107,7 @@ describe('lane test runs and the Run tab', () => {
     await createLane({ scripts: { test: 'node scripts/serve.cjs' } });
     await approveLaneAsIs(LANE_ID);
     await runLaneTest({ laneId: LANE_ID }, neverAsk);
-    const pid = await waitForPid(path.join(lanePath, 'serve.pid'));
+    const run = await waitForRunProcess(path.join(lanePath, 'serve.pid'));
 
     expect(await runLaneTest({ laneId: LANE_ID }, neverAsk)).toEqual({
       success: false,
@@ -120,7 +120,7 @@ describe('lane test runs and the Run tab', () => {
     expect(after.test).toMatchObject({ status: 'stopped', exitCode: expect.any(Number) });
     expect(after.test.durationMs).toBeGreaterThanOrEqual(0);
     expect(after.test.finishedAt).toBeGreaterThanOrEqual(after.test.startedAt ?? Infinity);
-    expect(isAlive(pid)).toBe(false);
+    expect(await isRunning(run)).toBe(false);
   });
 
   it("asks about the team's unapproved script on Start; Don't run declines and runs nothing", async () => {

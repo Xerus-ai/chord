@@ -14,6 +14,7 @@ import { resolveLaneBundle } from '@main/core/worktrees/lane-bundle';
 import { db } from '@main/db/client';
 import { repoSettings } from '@main/db/schema-repo-settings';
 import { repos, workItems, workItemWorktrees } from '@main/db/schema-work-items';
+import { runProcessOf, type RunProcess } from './run-process';
 
 /**
  * A real repository with real lanes for the run engine's suites: a `main`
@@ -179,19 +180,15 @@ export function answer(choice: 'run' | 'run-always' | 'dont-run'): {
   return { ask, asked };
 }
 
-export function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** The pid a script wrote to `file` once it was up. */
 export async function waitForPid(file: string): Promise<number> {
   await vi.waitFor(() => expect(fs.existsSync(file)).toBe(true), { timeout: 15_000 });
   return Number(fs.readFileSync(file, 'utf8'));
+}
+
+/** The process that wrote its pid to `file`, read while it runs (`isRunning` checks it later). */
+export async function waitForRunProcess(file: string): Promise<RunProcess> {
+  return runProcessOf(await waitForPid(file));
 }
 
 /** The same folder, however the OS spells it (8.3 names, case, separators). */
