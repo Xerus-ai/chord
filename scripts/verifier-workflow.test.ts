@@ -34,7 +34,9 @@ describe('the verifier workflow (devstation-4x42.265)', () => {
     expect(install).toContain('working-directory: ${{ runner.temp }}');
     expect(install).toContain('npm install -g @anthropic-ai/claude-code@');
     expect(install).not.toContain('secrets.');
-    expect(text.indexOf('- name: Install the Claude CLI')).toBeLessThan(text.indexOf('git init -q pr'));
+    expect(text.indexOf('- name: Install the Claude CLI')).toBeLessThan(
+      text.indexOf('git init -q pr')
+    );
     expect(text.match(/npm install/g)).toHaveLength(1);
   });
 
@@ -49,7 +51,9 @@ describe('the verifier workflow (devstation-4x42.265)', () => {
     expect(review).toContain('--setting-sources ""');
     expect(review).toContain('--strict-mcp-config');
     expect(review).toContain('--system-prompt "$(cat ../base/.github/verifier/system-prompt.md)"');
-    expect(review).toContain('--append-system-prompt "$(cat ../base/.github/verifier/ci-context.md)"');
+    expect(review).toContain(
+      '--append-system-prompt "$(cat ../base/.github/verifier/ci-context.md)"'
+    );
     expect(text).toContain('node base/scripts/verifier-verdict.mjs');
   });
 
