@@ -1,7 +1,10 @@
-# GitHub merges a low-risk PR by itself (devstation-4x42.57). The harness posts two commit statuses
-# on a PR head: `risk-tier` (low, or high: <why>) and then `verifier` (the fresh-context review's
-# verdict, which the main ruleset requires). When a status arrives or CI completes,
-# scripts/auto-merge.mjs decides from the PR, its files, the head's statuses and its check runs.
+# GitHub merges a low-risk PR by itself (devstation-4x42.57). Two commit statuses on a PR head
+# decide it with the checks: `risk-tier` (low, or high: <why>), which the harness posts, and
+# `verifier` (the fresh-context review's verdict, which the main ruleset requires), which the
+# chord-verifier App posts from verifier.yml (devstation-4x42.248). When a status arrives or CI
+# completes, scripts/auto-merge.mjs decides from the PR, its files, the head's statuses with their
+# creators and its check runs. `verifier` and `permit` count only from chord-verifier[bot]: the
+# agents' token can post any context, so the same context from another identity is absent.
 # The tier is not taken on trust: the script computes it again from the PR's changed files and
 # lines against .github/risk-tiers.json, both as they are on the default branch, and the stricter
 # tier wins; a file list GitHub cuts short or cannot give is high. A low-tier PR with every check
@@ -68,12 +71,14 @@ jobs:
             if ! gh api --paginate "repos/$REPO/pulls/$pr/files" --jq '.[] | {filename, previous_filename, changes}' > "$RUNNER_TEMP/files.jsonl"; then
               rm -f "$RUNNER_TEMP/files.jsonl"
             fi
-            gh api "repos/$REPO/commits/$SHA/status" > "$RUNNER_TEMP/status.json"
+            # Every status of the head with its creator (the combined status names no creator).
+            gh api --paginate "repos/$REPO/commits/$SHA/statuses" --jq '.[]' > "$RUNNER_TEMP/statuses.jsonl"
             gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" > "$RUNNER_TEMP/checks.json"
             decision=$(node scripts/auto-merge.mjs --sha "$SHA" --base main --tiers .github/risk-tiers.json \
               --pr "$RUNNER_TEMP/pr.json" --files "$RUNNER_TEMP/files.jsonl" \
-              --status "$RUNNER_TEMP/status.json" --checks "$RUNNER_TEMP/checks.json" \
+              --status "$RUNNER_TEMP/statuses.jsonl" --checks "$RUNNER_TEMP/checks.json" \
               --tier-context risk-tier --verifier-context verifier --permit-context permit \
+              --trusted-creator "chord-verifier[bot]" \
               --ignore-check "auto-merge hold" --ignore-check "auto-merge decide")
             echo "PR #$pr: $decision"
             action=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).action)' "$decision")

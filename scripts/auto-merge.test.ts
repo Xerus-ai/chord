@@ -24,7 +24,26 @@ const SHA = 'a'.repeat(40);
 const dir = mkdtempSync(join(tmpdir(), 'auto-merge-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-type Status = { context: string; state: string; description: string };
+/**
+ * devstation-4x42.248: `verifier` and `permit` count only from the chord-verifier App. The statuses
+ * are the head's list as GitHub gives it (`.../commits/<sha>/statuses`), each with its creator.
+ * RECORDED is a real one: PR #11's head, where the harness posted `risk-tier` and `verifier` with
+ * the agents' token (xerus-chord-bot), the token an agent could forge them with. An App's status
+ * has the same shape with the App's bot user as creator (the App is not created yet, 4x42.246).
+ */
+const TRUSTED = 'chord-verifier[bot]';
+const RECORDED = readFileSync(
+  join(SCRIPTS, '_testing', 'auto-merge', 'statuses-c4e8148.jsonl'),
+  'utf8'
+)
+  .split('\n')
+  .filter(Boolean)
+  .map((l) => JSON.parse(l) as Status);
+const TOKEN_USER = RECORDED[0].creator;
+const APP_USER: Creator = { ...TOKEN_USER, login: TRUSTED, type: 'Bot', id: 900000001 };
+type Creator = { login: string; type: string; id: number; [key: string]: unknown };
+type Status = { context: string; state: string; description: string; id: number; creator: Creator };
+let nextId = Math.max(...RECORDED.map((s) => s.id));
 type Run = { name: string; status: string; conclusion: string | null };
 type File = { filename: string; previous_filename?: string | null; changes: number };
 
@@ -38,13 +57,16 @@ const pr = (over: Record<string, unknown> = {}) => ({
   changedFiles: 1,
   ...over,
 });
-const status = (context: string, state: string, description: string): Status => ({
-  context,
-  state,
-  description,
-});
-const tierLow = status('risk-tier', 'success', 'low');
-const tierHigh = status('risk-tier', 'success', 'high: label area:db');
+/** A status as GitHub lists it, newer than every one before it; by default the App's. */
+const status = (
+  context: string,
+  state: string,
+  description: string,
+  creator: Creator = APP_USER
+): Status => ({ ...RECORDED[0], context, state, description, id: ++nextId, creator });
+// The harness posts the tier with the agents' token; it needs no trust (it only makes it stricter).
+const tierLow = status('risk-tier', 'success', 'low', TOKEN_USER);
+const tierHigh = status('risk-tier', 'success', 'high: label area:db', TOKEN_USER);
 const approve = status('verifier', 'success', 'APPROVE, round 1');
 const green: Run[] = [
   { name: 'lint, typecheck, test (Linux)', status: 'completed', conclusion: 'success' },
@@ -54,10 +76,11 @@ const green: Run[] = [
 ];
 const small: File[] = [{ filename: 'src/main/core/lanes/lane.ts', changes: 12 }];
 
-/** files: the PR's file list as the workflow writes it (one JSON object a line); null: gh gave none. */
-function decide(p: object, statuses: Status[], runs: Run[], files: File[] | null = small) {
+/** files: the PR's file list as the workflow writes it (one JSON object a line); null: gh gave none.
+ *  statuses: the head's, written as the workflow writes them (one JSON object a line). */
+function run(p: object, statuses: object[], runs: Run[], files: File[] | null, extra: string[]) {
   writeFileSync(join(dir, 'pr.json'), JSON.stringify(p));
-  writeFileSync(join(dir, 'status.json'), JSON.stringify({ state: 'success', sha: SHA, statuses }));
+  writeFileSync(join(dir, 'status.jsonl'), statuses.map((s) => JSON.stringify(s)).join('\n'));
   writeFileSync(
     join(dir, 'checks.json'),
     JSON.stringify({ total_count: runs.length, check_runs: runs })
@@ -69,14 +92,18 @@ function decide(p: object, statuses: Status[], runs: Run[], files: File[] | null
   for (const [flag, file] of [
     ['--pr', 'pr.json'],
     ['--files', 'files.jsonl'],
-    ['--status', 'status.json'],
+    ['--status', 'status.jsonl'],
     ['--checks', 'checks.json'],
   ])
     args.push(flag, join(dir, file));
   args.push('--tier-context', 'risk-tier', '--verifier-context', 'verifier');
   args.push('--permit-context', 'permit');
   args.push('--ignore-check', 'auto-merge hold', '--ignore-check', 'auto-merge decide');
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+  return spawnSync(process.execPath, [SCRIPT, ...args, ...extra], { encoding: 'utf8' });
+}
+
+function decide(p: object, statuses: object[], runs: Run[], files: File[] | null = small) {
+  const r = run(p, statuses, runs, files, ['--trusted-creator', TRUSTED]);
   if (r.status !== 0) throw new Error(`auto-merge.mjs exited ${r.status}: ${r.stdout}${r.stderr}`);
   return JSON.parse(r.stdout) as { action: string; reason: string };
 }
@@ -278,5 +305,79 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
       expect(text, job).toContain(`name: ${job}`);
       expect(text, job).toContain(`--ignore-check "${job}"`);
     }
+    // devstation-4x42.248: the statuses with their creators, and the App's login trusted.
+    expect(text).toContain(`gh api --paginate "repos/$REPO/commits/$SHA/statuses" --jq '.[]'`);
+    expect(text).toContain(`--trusted-creator "${TRUSTED}"`);
+  });
+});
+
+describe('verifier and permit count only from the chord-verifier App (devstation-4x42.248)', () => {
+  const tokenApprove = (over: Partial<Status> = {}) => ({
+    ...RECORDED.find((s) => s.context === 'verifier')!,
+    ...over,
+  });
+
+  it('a verifier status the agents token posted is absent', () => {
+    // The recorded head as it is: risk-tier low and verifier success, both from xerus-chord-bot.
+    expect(RECORDED.map((s) => [s.context, s.state, s.creator.type])).toEqual([
+      ['verifier', 'success', 'User'],
+      ['risk-tier', 'success', 'User'],
+    ]);
+    expect(decide(pr(), RECORDED, green)).toEqual({
+      action: 'none',
+      reason: 'no verifier status on the head yet',
+    });
+    // With the App's verdict the head is judged: its posted tier was high, so it waits for a
+    // permit, which the App's opens.
+    expect(decide(pr(), [...RECORDED, approve], green).reason).toBe(
+      waitsForPermit('31878 counted lines changed, more than max_changed_lines 300')
+    );
+    const permit = status('permit', 'success', 'granted');
+    expect(decide(pr(), [...RECORDED, approve, permit], green).action).toBe('enable');
+  });
+
+  it('a forged success posted after the App verdict leaves the App verdict standing', () => {
+    const changes = status('verifier', 'failure', 'REQUEST_CHANGES, round 1');
+    const forged = tokenApprove({ id: ++nextId });
+    const on = pr({ autoMergeRequest: { mergeMethod: 'MERGE' } });
+    expect(decide(on, [tierLow, changes, forged], green)).toEqual({
+      action: 'disable',
+      reason: 'verifier is failure: REQUEST_CHANGES, round 1',
+    });
+    // A creator that only looks like the App (another login, or none) is not it.
+    const lookalike = status('verifier', 'success', 'APPROVE', {
+      ...APP_USER,
+      login: 'chord-verifier',
+    });
+    const anonymous = { ...approve, id: ++nextId, creator: null };
+    expect(decide(pr(), [tierLow, lookalike, anonymous], green).reason).toBe(
+      'no verifier status on the head yet'
+    );
+  });
+
+  it('the newest App status of a context decides, whatever the list order', () => {
+    const first = status('verifier', 'failure', 'REQUEST_CHANGES, round 1');
+    const second = status('verifier', 'success', 'APPROVE, round 2');
+    expect(decide(pr(), [second, tierLow, first], green).action).toBe('enable');
+  });
+
+  it('a permit the agents token posted does not open a high tier', () => {
+    const forgedPermit = status('permit', 'success', 'granted', TOKEN_USER);
+    expect(decide(pr(), [tierHigh, approve, forgedPermit], green)).toEqual({
+      action: 'none',
+      reason: waitsForPermit('label area:db'),
+    });
+    const appPermit = status('permit', 'success', 'granted');
+    expect(decide(pr(), [tierHigh, approve, appPermit], green).action).toBe('enable');
+  });
+
+  it('refuses to decide without the trusted creator or from a status it cannot read', () => {
+    const none = run(pr(), [tierLow, approve], green, small, []);
+    expect(none.status).toBe(2);
+    expect(none.stderr).toContain('--trusted-creator');
+    const noId = { ...approve, id: undefined };
+    const bad = run(pr(), [tierLow, noId], green, small, ['--trusted-creator', TRUSTED]);
+    expect(bad.status).toBe(2);
+    expect(bad.stderr).toContain('a status without context, state or id');
   });
 });

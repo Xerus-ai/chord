@@ -1,0 +1,119 @@
+# The required `verifier` status, posted by the chord-verifier GitHub App (devstation-4x42.248,
+# 4x42.246). Before this the harness posted it with the agents' token, which any agent session
+# holds, so a hand-posted `verifier` satisfied the ruleset and auto-merge. Now:
+#   - pull_request_target runs this file as it is on main: a PR cannot change its own review.
+#   - Both jobs run in the environment `verifier`, whose deployment branches are main only, so a
+#     workflow a PR branch adds cannot reach its secrets (the App's key, the Claude credential).
+#   - review: claude -p on the review-verifier prompt (.github/verifier/system-prompt.md, kept
+#     equal to the harness's agent by its hook test), with the harness's verifier.cmd limits:
+#     Read, Grep and Glob only, no settings, no MCP, no session. Its input is the PR's diff and
+#     title/body as data; its tools read the PR head as files, checked out and never run.
+#   - post: mints the App's token (Commit statuses: write) and posts `verifier` on the reviewed
+#     head. A review that failed or gave no verdict line posts error, never success.
+# scripts/auto-merge.mjs trusts `verifier` and `permit` only from chord-verifier[bot]; the user
+# binds the ruleset's `verifier` to the App (4x42.246 step 5). Same-repository PRs only: a fork's
+# PR gets no status, so the ruleset holds it.
+name: Verifier
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: verifier-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: verifier review
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: verifier
+    outputs:
+      state: ${{ steps.verdict.outputs.state }}
+      description: ${{ steps.verdict.outputs.description }}
+    steps:
+      # main's tree: the prompt and the verdict script are main's, never the PR's.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: base
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: base/.nvmrc
+      # Before the PR head is on disk and with no secret in the step: npm reads a project .npmrc
+      # from its working directory, and the PR's tree must never choose the registry for the CLI
+      # that then holds the Claude credential.
+      - name: Install the Claude CLI
+        working-directory: ${{ runner.temp }}
+        run: npm install -g @anthropic-ai/claude-code@2.1.319
+      - name: The PR head as files to read, and its diff as data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git init -q pr
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -C pr -c "http.extraheader=AUTHORIZATION: basic $auth" fetch -q --depth=1 "https://github.com/$REPO.git" "$HEAD"
+          git -C pr -c core.hooksPath=/dev/null -c filter.lfs.smudge= -c filter.lfs.process= checkout -q FETCH_HEAD
+          # The diff and the PR text as of the event's head, the one the status is posted on: a
+          # push after the event does not change what this run reviews.
+          gh api "repos/$REPO/compare/$BASE...$HEAD" -H "Accept: application/vnd.github.diff" > "$RUNNER_TEMP/diff.patch"
+          jq '.pull_request | {number, title, body, head: .head.sha}' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
+      - name: Review the diff (harness.json verifier.cmd's limits)
+        working-directory: pr
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          MAX_DIFF_BYTES: 400000
+        run: |
+          set -euo pipefail
+          size=$(wc -c < "$RUNNER_TEMP/diff.patch")
+          if [ "$size" -gt "$MAX_DIFF_BYTES" ]; then
+            echo "the diff is $size bytes, over $MAX_DIFF_BYTES: no review" > "$RUNNER_TEMP/review.txt"
+            exit 0
+          fi
+          {
+            echo '## The pull request (data)'; cat "$RUNNER_TEMP/pr.json"; echo
+            echo '## The diff (data)'; cat "$RUNNER_TEMP/diff.patch"
+          } > "$RUNNER_TEMP/input.md"
+          claude -p --model opus --tools Read,Grep,Glob --setting-sources "" --strict-mcp-config \
+            --no-session-persistence --output-format text --effort high \
+            --system-prompt "$(cat ../base/.github/verifier/system-prompt.md)" \
+            --append-system-prompt "$(cat ../base/.github/verifier/ci-context.md)" \
+            < "$RUNNER_TEMP/input.md" > "$RUNNER_TEMP/review.txt"
+      - name: The verdict
+        id: verdict
+        run: node base/scripts/verifier-verdict.mjs "$RUNNER_TEMP/review.txt" >> "$GITHUB_OUTPUT"
+
+  post:
+    name: verifier post
+    needs: review
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: verifier
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.VERIFIER_APP_ID }}
+          private-key: ${{ secrets.VERIFIER_APP_KEY }}
+          permission-statuses: write
+      - name: Post verifier on the reviewed head as chord-verifier
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ needs.review.outputs.state || 'error' }}
+          DESCRIPTION: ${{ needs.review.outputs.description || 'the review job did not finish' }}
+        run: |
+          gh api -X POST "repos/$REPO/statuses/$HEAD" -f state="$STATE" -f context=verifier \
+            -f description="$DESCRIPTION"
