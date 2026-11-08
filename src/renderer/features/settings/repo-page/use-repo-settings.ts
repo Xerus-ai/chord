@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import type { JustMePatch, TeamConfigPatch } from '@shared/repo-config';
 import type { Result } from '@shared/result';
-import type { JustMePatch, TeamConfigPatch } from '@main/core/repo-config/repo-settings-writes';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { rpc } from '@renderer/lib/ipc';
 

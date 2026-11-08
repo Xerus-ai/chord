@@ -1,7 +1,6 @@
 import { FolderOpen } from 'lucide-react';
 import { useState } from 'react';
-import type { JustMePatch } from '@main/core/repo-config/repo-settings-writes';
-import type { RepoJustMeSettings } from '@main/core/repo-config/resolve-repo-config';
+import type { JustMePatch, RepoJustMeSettings } from '@shared/repo-config';
 import { rpc } from '@renderer/lib/ipc';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';

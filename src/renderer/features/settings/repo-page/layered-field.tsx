@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ConfigLayer } from '@main/core/repo-config/resolve-repo-config';
+import type { ConfigLayer } from '@shared/repo-config';
 import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';

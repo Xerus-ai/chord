@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ResolvedRepoConfig } from '@main/core/repo-config/resolve-repo-config';
+import type { ResolvedRepoConfig } from '@shared/repo-config';
 import { removeDirSync } from '@main/lib/remove-dir-sync';
 import {
   buildExecutableBundle,

@@ -1,8 +1,8 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { laneSetupChangedChannel } from '@shared/events/workItemEvents';
+import type { AgentStartMode, ScriptKind } from '@shared/repo-config';
 import type { RunMode } from '@shared/run-scripts';
-import type { AgentStartMode, ScriptKind } from '@main/core/repo-config/resolve-repo-config';
 import { SetupLog } from '@renderer/features/work-list/setup-log';
 import { toast } from '@renderer/lib/hooks/use-toast';
 import { events, rpc } from '@renderer/lib/ipc';

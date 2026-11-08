@@ -1,4 +1,4 @@
-import type { ConfigLayer } from '@main/core/repo-config/resolve-repo-config';
+import type { ConfigLayer } from '@shared/repo-config';
 
 /**
  * Repo › Run & test: what a script field says about running it, from where
