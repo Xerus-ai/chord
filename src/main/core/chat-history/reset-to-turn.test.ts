@@ -21,12 +21,14 @@ process.env.CLAUDE_CONFIG_DIR = claudeConfigDir;
 
 const { db } = await import('@main/db/client');
 const { checkpoints } = await import('@main/db/schema-checkpoints');
-const { agentSessions, chatMessages } = await import('@main/db/schema-work-items');
+const { agentSessions, chatMessages, workItemWorktrees } = await import(
+  '@main/db/schema-work-items'
+);
 const { resolveClaudeTranscriptPath } = await import(
   '@main/core/agent-sessions/claude-conversation-store'
 );
 const { CLAUDE_SESSION_ID, seedClaudeTranscript } = await import('./_testing/seed-transcripts');
-const { buildResetFixture, clearResetTables, SESSION_ID, WORK_ITEM_ID } = await import(
+const { buildResetFixture, clearResetTables, SESSION_ID, WORK_ITEM_ID, WORKTREE_ID } = await import(
   './_testing/reset-fixture'
 );
 const { resetToTurn } = await import('./reset-to-turn');
@@ -158,6 +160,30 @@ describe('resetToTurn (real DB, git, checkpoints and Agent SDK fork)', () => {
         sessionId: SESSION_ID,
         workItemId: WORK_ITEM_ID,
       });
+    }
+  });
+
+  // Review round 1 (devstation-4x42.242): a companion lane's chat runs at the companion root, so
+  // its conversation is kept there; Reset cuts that one, and puts back the lane's own files.
+  it("cuts a companion lane's conversation where its chats run, the companion root", async () => {
+    const companion = realpathSync(mkdtempSync(join(tmpdir(), 'chord-reset-companion-')));
+    try {
+      db.update(workItemWorktrees)
+        .set({ companionPath: companion, companionRepoPath: companion })
+        .where(eq(workItemWorktrees.id, WORKTREE_ID))
+        .run();
+      rmSync(resolveClaudeTranscriptPath(repo, CLAUDE_SESSION_ID) as string);
+      seedClaudeTranscript(claudeConfigDir, companion);
+
+      const result = await resetToTurn({ workItemId: WORK_ITEM_ID, turnId: 'turn-1' });
+      if (!result.success) throw new Error(`reset refused: ${result.error.type}`);
+
+      expect(readFileSync(join(repo, 'notes.txt'), 'utf8')).toBe('one\n');
+      const forked = resolveClaudeTranscriptPath(companion, result.data.forkedExternalId);
+      expect(readFileSync(forked as string, 'utf8')).toContain('ALPHA-17');
+      expect(resolveClaudeTranscriptPath(repo, result.data.forkedExternalId)).toBeNull();
+    } finally {
+      removeDirSync(companion);
     }
   });
 });

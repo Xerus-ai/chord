@@ -1,6 +1,6 @@
+import type { ConfigLayer } from '@shared/repo-config';
 import { err, ok, type Result } from '@shared/result';
 import { RepoConfigError } from '@main/core/repo-config/read-team-config';
-import type { ConfigLayer } from '@main/core/repo-config/resolve-repo-config';
 import type { AskScriptApproval } from '@main/core/workspaces/ask-script-approval';
 import { isBundleApproved } from '@main/core/workspaces/script-approval';
 import { resolveLaneBundle, type LaneBundle } from '@main/core/worktrees/lane-bundle';
@@ -93,6 +93,7 @@ export async function approveLaneScript(
         repoPath: lane.sourcePath,
         ref: lane.targetRef,
         remoteUrl: lane.remoteUrl,
+        claudeSource: lane.claudeSource,
         bundle,
       },
       ask,

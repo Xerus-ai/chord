@@ -1,18 +1,14 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import { createRPCController } from '@shared/ipc/rpc';
+import type { JustMePatch, TeamConfigPatch } from '@shared/repo-config';
 import { err, ok } from '@shared/result';
 import { revokeAllApprovals, revokeRepoApproval } from '@main/core/workspaces/script-approval';
 import { db } from '@main/db/client';
 import { repos, workItems, workItemWorktrees } from '@main/db/schema-work-items';
 import { RepoConfigError } from './read-team-config';
 import { readRepoSettingsView, readRepoTrustView } from './repo-settings-view';
-import {
-  updateJustMeSettings,
-  writeTeamConfigFile,
-  type JustMePatch,
-  type TeamConfigPatch,
-} from './repo-settings-writes';
+import { updateJustMeSettings, writeTeamConfigFile } from './repo-settings-writes';
 import { resolveDefaultBaseRef } from './resolve-lane-base';
 import { TeamFileOffBaseError } from './team-file-lineage';
 

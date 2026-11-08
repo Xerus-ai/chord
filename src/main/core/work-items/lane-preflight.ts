@@ -6,7 +6,8 @@ import type { IExecutionContext } from '@main/core/execution-context/types';
 import { readGitFailureOutput } from '@main/core/git/git-failure-output';
 import { findBranchCheckout } from '@main/core/projects/worktrees/find-branch-checkout';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
-import { branchCheckedOutError, branchNotFoundError } from './lane-checkout';
+import { branchNotFoundError } from './lane-checkout';
+import { branchCheckedOutError } from './lane-checkout-placement';
 
 /**
  * What `createWorkItem` checks before it writes anything: the failures the

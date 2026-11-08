@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import type { ResolvedRepoConfig } from '@shared/repo-config';
 import { DEFAULT_RUN_SCRIPT_ID, type RunScriptsValue } from '@shared/run-scripts';
-import type { ResolvedRepoConfig } from '@main/core/repo-config/resolve-repo-config';
 import { Button } from '@renderer/lib/ui/button';
 import { Input } from '@renderer/lib/ui/input';
 import { Textarea } from '@renderer/lib/ui/textarea';

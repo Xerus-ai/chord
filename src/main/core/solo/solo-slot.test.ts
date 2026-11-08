@@ -1,35 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { soloChangedChannel } from '@shared/events/soloEvents';
 import {
   answer,
   commitTeamConfig,
-  insertRepoAndItems,
   neverAsk,
-  removeLaneRepo,
   REPO_ID,
   samePath,
-  type LaneRepo,
 } from '@main/core/lane-runs/_testing/lane-run-fixture';
-import { isRunning, runProcessOf } from '@main/core/lane-runs/_testing/run-process';
-import { readLaneRunState, releaseLaneRuns } from '@main/core/lane-runs/lane-run-registry';
-import { db } from '@main/db/client';
-import { repos, workItems } from '@main/db/schema-work-items';
+import { isRunning } from '@main/core/lane-runs/_testing/run-process';
+import { readLaneRunState } from '@main/core/lane-runs/lane-run-registry';
+import { emitted } from '@main/lib/_stand-ins/renderer-events';
 import {
   addSoloLane,
   branchOf,
-  createSoloLaneRepo,
   hashRootFiles,
   headOf,
   sawCtrlC,
   SOLO_TEAM_CONFIG,
-  statusOf,
   waitForRunMark,
 } from './_testing/solo-slot-fixture';
+import {
+  expectRootReturned,
+  holdSoloSlot,
+  lanesPerItem,
+  useSoloSuite,
+} from './_testing/solo-slot-suite';
 import { readSoloView } from './read-solo-view';
 import { releaseSolo } from './release-solo';
-import { leaveSoloQueue, soloLane } from './solo-lane';
+import { soloLane } from './solo-lane';
 import { readSoloState } from './solo-state';
 
 /**
@@ -41,20 +41,9 @@ import { readSoloState } from './solo-state';
  * DB) and the IPC emitter (captured) are substituted, as in the run engine's
  * suites.
  */
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-const emitted = vi.hoisted(() => [] as { channel: string; payload: unknown }[]);
-vi.mock('@main/lib/events', () => ({
-  events: {
-    emit: (channel: { name: string }, payload: unknown) =>
-      emitted.push({ channel: channel.name, payload }),
-    on: () => () => {},
-    once: () => () => {},
-  },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const LANES = ['lane-a', 'lane-b', 'lane-c'] as const;
 const [A, B, C] = LANES;
@@ -62,38 +51,23 @@ const [A, B, C] = LANES;
 const D = 'lane-d';
 
 describe('the Solo slot', () => {
-  let repo: LaneRepo;
+  const suite = useSoloSuite('solo-slot-', lanesPerItem(LANES), [D]);
+  const { lanePaths } = suite;
   let root: string;
-  const lanePaths: Record<string, string> = {};
-
-  beforeEach(async () => {
+  beforeEach(() => {
     emitted.length = 0;
-    repo = await createSoloLaneRepo('solo-slot-');
-    root = repo.repoDir;
-    insertRepoAndItems(root, ['item-a', 'item-b', 'item-c']);
-    for (const laneId of LANES) {
-      const dir = laneId.slice('lane-'.length);
-      lanePaths[laneId] = await addSoloLane(repo, { laneId, workItemId: `item-${dir}`, dir });
-    }
+    root = suite.root;
   });
-
-  afterEach(async () => {
-    for (const laneId of [...LANES, D]) await leaveSoloQueue(laneId);
-    await releaseSolo({ repoId: REPO_ID }, { discardRootChanges: true }, neverAsk);
-    for (const laneId of [...LANES, D]) await releaseLaneRuns(laneId);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await removeLaneRepo(repo);
-  });
-
-  async function holdWith(laneId: string) {
-    const result = await soloLane(laneId, neverAsk);
-    if (!result.success || result.data.status !== 'holding') {
-      throw new Error(`${laneId} did not take the slot: ${JSON.stringify(result)}`);
-    }
-    const mark = await waitForRunMark(root, laneId);
-    return { ...mark, process: await runProcessOf(mark.pid) };
-  }
+  const holdWith = (laneId: string) => holdSoloSlot(root, laneId);
+  /** D on item-a beside lane-a, not approved: Solo asks about its scripts. */
+  const addUnapprovedD = () =>
+    addSoloLane(suite.repo, {
+      laneId: D,
+      workItemId: 'item-a',
+      dir: 'd',
+      isPrimary: false,
+      approve: false,
+    });
 
   it("refuses not_solo_mode when the repository's run mode is perWorktree, touching nothing", async () => {
     await commitTeamConfig(root, { ...SOLO_TEAM_CONFIG, runMode: 'perWorktree' });
@@ -207,10 +181,7 @@ describe('the Solo slot', () => {
     );
 
     expect(released).toMatchObject({ success: true, data: { releasedLaneId: A, handedTo: null } });
-    expect(hashRootFiles(root)).toEqual(before);
-    expect(await headOf(root)).toBe(head);
-    expect(await branchOf(root)).toBe('main');
-    expect(await statusOf(root)).toBe('');
+    await expectRootReturned(root, before, head);
     expect((await readSoloState(root)).status).toBe('none');
     expect(await readSoloView(REPO_ID)).toMatchObject({ holder: null, queue: [] });
   });
@@ -249,10 +220,7 @@ describe('the Solo slot', () => {
     const released = await releaseSolo({ laneId: A }, { discardRootChanges: true }, neverAsk);
 
     expect(released.success).toBe(true);
-    expect(hashRootFiles(root)).toEqual(before);
-    expect(await headOf(root)).toBe(head);
-    expect(await branchOf(root)).toBe('main');
-    expect(await statusOf(root)).toBe('');
+    await expectRootReturned(root, before, head);
   });
 
   it('refuses a dirty root with its files, and the lane does not join any queue', async () => {
@@ -267,13 +235,7 @@ describe('the Solo slot', () => {
   });
 
   it("asks about the lane's scripts before the root is touched: Don't run leaves the root and the queue alone", async () => {
-    await addSoloLane(repo, {
-      laneId: D,
-      workItemId: 'item-a',
-      dir: 'd',
-      isPrimary: false,
-      approve: false,
-    });
+    await addUnapprovedD();
     const head = await headOf(root);
     const { ask, asked } = answer('dont-run');
 
@@ -287,13 +249,7 @@ describe('the Solo slot', () => {
   });
 
   it('asks a lane that queues at the time it queues, so the hand-over runs without asking', async () => {
-    await addSoloLane(repo, {
-      laneId: D,
-      workItemId: 'item-a',
-      dir: 'd',
-      isPrimary: false,
-      approve: false,
-    });
+    await addUnapprovedD();
     await holdWith(A);
     const { ask, asked } = answer('run');
 

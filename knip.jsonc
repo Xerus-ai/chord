@@ -13,5 +13,8 @@
     "scripts/e2e/lib/{build-e2e-app,ui-identity-compare,skill-run}.mjs",
     // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
     "scripts/release/*.ts",
+    // Perf benches, run by hand as `node scripts/perf/<bench>.mjs <appDir>` on .e2e-app and
+    // .e2e-app-base for before/after evidence; results under <e2e out>/perf (devstation-4x42.226).
+    "scripts/perf/*.mjs",
   ],
 }

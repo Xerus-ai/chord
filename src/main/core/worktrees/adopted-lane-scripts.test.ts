@@ -188,6 +188,7 @@ describe('scripts in an adopted checkout', () => {
     const page = renderTrustPromptPage({
       repoPath: repoDir,
       ref: 'main',
+      claudeSource: null,
       bundle: asked[0].bundle.content,
       previous: null,
       shellSetupRuns: true,

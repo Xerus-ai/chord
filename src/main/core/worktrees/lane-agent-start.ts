@@ -7,7 +7,7 @@ import {
 import { isBundleApproved } from '@main/core/workspaces/script-approval';
 import { resolveLaneBundle } from './lane-bundle';
 import { approveBundleForLane } from './lane-run-approval';
-import { findWorktreeRow } from './worktree-lookup';
+import { findWorktreeRow, laneSessionCwd } from './worktree-lookup';
 
 /**
  * What an agent starting in a lane may load from the repository. It asks
@@ -41,7 +41,7 @@ export async function resolveAgentStartApproval(
     if (!row) throw new Error(`Lane ${laneId} does not exist`);
     return {
       approved: false,
-      claude: await readClaudeExecutableConfig(row.path),
+      claude: await readClaudeExecutableConfig(laneSessionCwd(row)),
       shellSetup: undefined,
     };
   }
@@ -62,6 +62,7 @@ export async function resolveAgentStartApproval(
             repoPath: lane.sourcePath,
             ref: lane.targetRef,
             remoteUrl: lane.remoteUrl,
+            claudeSource: lane.claudeSource,
             bundle,
           },
           ask,

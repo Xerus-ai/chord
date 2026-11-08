@@ -19,7 +19,15 @@ const BUNDLE: ExecutableBundle = {
 };
 
 function request(bundle: ExecutableBundle | null) {
-  return { laneId: LANE, repoId: REPO, repoPath: '/repo', ref: 'main', remoteUrl: null, bundle };
+  return {
+    laneId: LANE,
+    repoId: REPO,
+    repoPath: '/repo',
+    ref: 'main',
+    remoteUrl: null,
+    claudeSource: null,
+    bundle,
+  };
 }
 
 function counting(answer: 'run' | 'skip'): { ask: AskScriptApproval; calls: () => number } {

@@ -1,6 +1,10 @@
 import { ok, type Result } from '@shared/result';
 import { getActiveSession } from '@main/core/work-items/active-sessions';
-import { findWorktreeRow, getPrimaryWorktreeRow } from '@main/core/worktrees/worktree-lookup';
+import {
+  findWorktreeRow,
+  getPrimaryWorktreeRow,
+  laneSessionCwd,
+} from '@main/core/worktrees/worktree-lookup';
 import type { HistoryPoint } from './fork-conversation';
 import {
   checkLanePresent,
@@ -50,7 +54,7 @@ export function planHistoryReset(
   );
   if (!lane.success) return lane;
 
-  const point = resolveHistoryPoint(chatTurn.data, lane.data.path);
+  const point = resolveHistoryPoint(chatTurn.data, laneSessionCwd(lane.data));
   if (!point.success) {
     return refuseHistory('no_history_point', `${point.error.message} Reset files to here instead.`);
   }

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
+import type { RepoJustMeSettings, ResolvedRepoConfig } from '@shared/repo-config';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { resolveLanePoolPath } from '@main/core/work-items/lane-pool-path';
 import {
@@ -23,12 +24,7 @@ import {
   TEAM_CONFIG_FILE,
 } from './read-team-config';
 import { resolveDefaultBaseRef } from './resolve-lane-base';
-import {
-  readJustMeSettings,
-  resolveRepoConfig,
-  type RepoJustMeSettings,
-  type ResolvedRepoConfig,
-} from './resolve-repo-config';
+import { readJustMeSettings, resolveRepoConfig } from './resolve-repo-config';
 import { describeTeamFileOffBase } from './team-file-lineage';
 
 /**
@@ -176,6 +172,20 @@ export interface RepoTrustView {
   approvedLaneCount: number;
 }
 
+/**
+ * The Claude config a new lane's sessions would load: the repository's at the
+ * base, or for a repository with a companion the companion's, where those
+ * sessions start (`laneSessionCwd`), as committed at the companion main
+ * checkout's HEAD, the commit a new companion worktree forks from
+ * (`companion-checkout.ts`). The same config the lane gate asks about.
+ */
+async function readNewLaneClaudeConfig(repoId: string, repoPath: string, baseRef: string) {
+  const companion = readJustMeSettings(repoId).companionRepo;
+  return companion
+    ? await readClaudeExecutableConfigAtRef(companion.path, 'HEAD')
+    : await readClaudeExecutableConfigAtRef(repoPath, baseRef);
+}
+
 async function readCurrentBundle(
   repoId: string,
   repoPath: string,
@@ -184,7 +194,7 @@ async function readCurrentBundle(
   const config = await resolveRepoConfig({ repoId, repoPath, ref: baseRef });
   const current = buildExecutableBundle(
     collectChordScripts(config),
-    await readClaudeExecutableConfigAtRef(repoPath, baseRef)
+    await readNewLaneClaudeConfig(repoId, repoPath, baseRef)
   );
   return { current, remote: config.remote.value };
 }

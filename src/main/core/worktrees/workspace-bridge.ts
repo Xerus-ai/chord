@@ -134,6 +134,7 @@ async function askAboutUnapprovedTeardown(worktreeId: string): Promise<void> {
         repoPath: lane.sourcePath,
         ref: lane.targetRef,
         remoteUrl: lane.remoteUrl,
+        claudeSource: lane.claudeSource,
         bundle: lane.bundle,
       },
       askScriptApproval

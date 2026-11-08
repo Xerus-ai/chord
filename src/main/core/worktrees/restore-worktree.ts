@@ -3,6 +3,11 @@ import { eq } from 'drizzle-orm';
 import { err, ok, type Result } from '@shared/result';
 import type { Worktree } from '@shared/worktrees';
 import { restoreCheckpointCommit } from '@main/core/checkpoints/checkpoint-git';
+import { rethrowAfterRollback } from '@main/core/work-items/rethrow-after-rollback';
+import {
+  restoreLaneCompanion,
+  type LaneCompanionRestoreError,
+} from '@main/core/work-items/work-item-worktree-git';
 import { askScriptApproval } from '@main/core/workspaces/ask-script-approval';
 import { db } from '@main/db/client';
 import { workItemWorktrees, type WorkItemWorktreeRow } from '@main/db/schema-work-items';
@@ -24,7 +29,8 @@ export type RestoreWorktreeError =
   | { type: 'not_archived' }
   | { type: 'branch_missing' }
   | { type: 'checkout_missing'; path: string }
-  | { type: 'branch_checked_out'; path: string };
+  | { type: 'branch_checked_out'; path: string }
+  | LaneCompanionRestoreError;
 
 async function reopenLane(row: WorkItemWorktreeRow, runSetup: boolean): Promise<Worktree> {
   // The workspace first: the moment the lane reads as live, the rail reads its
@@ -55,7 +61,8 @@ async function reopenLane(row: WorkItemWorktreeRow, runSetup: boolean): Promise<
  * back at its own path from its branch, with the archive snapshot written over
  * it uncommitted (index at HEAD), and setup runs again. The snapshot's ref is
  * released once its work is back in the checkout. A lane whose branch was
- * deleted has nothing to restore from. An adopted checkout was never
+ * deleted has nothing to restore from. A lane that was nested in a companion
+ * worktree gets that worktree back first, from its companion branch. An adopted checkout was never
  * removed: it is only shown again, if the user's folder is still there.
  */
 export async function restoreWorktree(
@@ -74,8 +81,15 @@ export async function restoreWorktree(
   if (row.branchName === null || !(await branchExists(repoPath, row.branchName))) {
     return err({ type: 'branch_missing' as const });
   }
-  const refused = await restoreLaneCheckout(repoPath, row.path, row.branchName);
-  if (refused) return err(refused);
+  const companion = await restoreLaneCompanion(row, row.branchName);
+  if (!companion.success) return err(companion.error);
+  const refused = await restoreLaneCheckout(repoPath, row.path, row.branchName).catch(
+    (error: unknown) => rethrowAfterRollback(error, companion.data)
+  );
+  if (refused) {
+    await companion.data();
+    return err(refused);
+  }
 
   const snapshot = await readArchiveSnapshot(repoPath, row.id);
   if (snapshot !== null) {

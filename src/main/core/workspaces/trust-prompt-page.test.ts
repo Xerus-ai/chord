@@ -22,6 +22,7 @@ function render(content: Partial<TrustPromptContent> = {}, theme: 'dark' | 'ligh
   return renderTrustPromptPage({
     repoPath: REPO,
     ref: 'origin/main',
+    claudeSource: null,
     bundle: SETUP_ONLY,
     previous: null,
     shellSetupRuns: true,
@@ -199,6 +200,23 @@ describe('renderTrustPromptPage', () => {
     expect(page).toMatch(/Your own Claude settings and hooks still apply/);
   });
 
+  // Review round 1 (devstation-4x42.242): a companion lane's chats start at the companion's root
+  // and load its Claude config, so the page names that repository, not this one.
+  it("names the companion repository whose Claude config a companion lane's chats load", () => {
+    const companion = path.resolve('/pool/login');
+    const page = render({
+      claudeSource: companion,
+      bundle: { chord: {}, claude: { settings: { hooks: { Stop: [] } } } },
+    });
+    expect(page).toContain(
+      `the Claude config of the companion repository at <code>${companion}</code>`
+    );
+    expect(page).toContain(
+      `chats here start without the companion repository&#39;s (${companion}) CLAUDE.md`
+    );
+    expect(page).not.toMatch(/this repository&#39;s CLAUDE\.md/);
+  });
+
   it('shows each skill, subagent and command file that runs code, under its path (devstation-493)', () => {
     const page = render({
       bundle: {
@@ -292,6 +310,7 @@ describe('renderTrustPromptPage', () => {
       renderTrustPromptPage({
         repoPath: REPO,
         ref: 'origin/main',
+        claudeSource: null,
         bundle: SETUP_ONLY,
         previous: null,
         shellSetupRuns: true,

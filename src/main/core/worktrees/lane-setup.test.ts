@@ -4,15 +4,13 @@ import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
+import { answer, neverAsk } from '@main/core/lane-runs/_testing/lane-run-fixture';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
-import type {
-  AskScriptApproval,
-  ScriptApprovalRequest,
-} from '@main/core/workspaces/ask-script-approval';
-import { recordLaneApproval, recordRepoApproval } from '@main/core/workspaces/script-approval';
+import { recordLaneApproval } from '@main/core/workspaces/script-approval';
 import { db } from '@main/db/client';
 import { repoSettings } from '@main/db/schema-repo-settings';
 import { repos, workItems, workItemWorktrees } from '@main/db/schema-work-items';
+import { emitted } from '@main/lib/_stand-ins/renderer-events';
 import { removeDirSync } from '@main/lib/remove-dir-sync';
 import { resolveLaneBundle } from './lane-bundle';
 import { waitForLane } from './lane-readiness';
@@ -27,10 +25,7 @@ vi.mock('@main/db/client', async () => {
 
 // The IPC emitter needs Electron's main process; what is under test here is
 // the state the emitter would announce, which is read back from the database.
-const emitted = vi.hoisted(() => [] as unknown[]);
-vi.mock('@main/lib/events', () => ({
-  events: { emit: (_channel: unknown, payload: unknown) => emitted.push(payload) },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 async function git(args: string[], cwd: string): Promise<string> {
   const { stdout } = await new LocalExecutionContext({ root: cwd }).exec(GIT_EXECUTABLE, args);
@@ -47,33 +42,6 @@ const ITEM_ID = 'item-1';
 const LANE_ID = 'lane-1';
 const SECOND_ITEM_ID = 'item-2';
 const SECOND_LANE_ID = 'lane-2';
-
-/** For content already approved: being asked at all fails the run. */
-const neverAsk: AskScriptApproval = async (request) => {
-  throw new Error(`asked to approve ${request.bundle.hash}, which should already be approved`);
-};
-
-/** The user's answer, recorded the way the real prompt records it. */
-function answer(choice: 'run' | 'run-always' | 'dont-run'): {
-  ask: AskScriptApproval;
-  asked: ScriptApprovalRequest[];
-} {
-  const asked: ScriptApprovalRequest[] = [];
-  const ask: AskScriptApproval = async (request) => {
-    asked.push(request);
-    if (choice === 'run') recordLaneApproval(request.laneId, request.bundle);
-    if (choice === 'run-always') {
-      recordRepoApproval({
-        repoId: request.repoId,
-        hash: request.bundle.hash,
-        content: request.bundle.content,
-        remoteUrl: request.remoteUrl,
-      });
-    }
-    return choice === 'dont-run' ? 'skip' : 'run';
-  };
-  return { ask, asked };
-}
 
 describe('lane setup', () => {
   let root: string;
@@ -154,7 +122,9 @@ describe('lane setup', () => {
     expect(fs.readFileSync(path.join(lanePath, 'marker.txt'), 'utf8')).toBe(LANE_ID);
     expect(laneRow().setupStatus).toBe('ok');
     expect(laneRow().setupLogPath).toBeTruthy();
-    expect(emitted).toContainEqual(expect.objectContaining({ worktreeId: LANE_ID, status: 'ok' }));
+    expect(emitted.map((e) => e.payload)).toContainEqual(
+      expect.objectContaining({ worktreeId: LANE_ID, status: 'ok' })
+    );
   });
 
   it('keeps the checkout and records the log when the script fails', async () => {
@@ -218,7 +188,7 @@ describe('lane setup', () => {
     expect(laneRow().approvedScriptsHash).toBeNull();
     expect(fs.existsSync(path.join(lanePath, 'marker.txt'))).toBe(false);
     expect(await readLaneSetupLog(LANE_ID)).toMatch(/not run.*Run setup/i);
-    expect(emitted).toContainEqual(
+    expect(emitted.map((e) => e.payload)).toContainEqual(
       expect.objectContaining({ worktreeId: LANE_ID, status: 'skipped' })
     );
 

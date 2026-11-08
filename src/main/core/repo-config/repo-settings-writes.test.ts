@@ -56,6 +56,20 @@ describe('updateJustMeSettings', () => {
     expect(readJustMeSettings(REPO_ID)).toEqual({ agentStart: 'immediately' });
   });
 
+  // devstation-4x42.242: the companion is this machine's alone, set and cleared whole.
+  it('stores a companion repository, refuses a relative one, and clears it with null', () => {
+    const companion = { path: path.resolve('companion'), appFolder: 'app' };
+    updateJustMeSettings(REPO_ID, { companionRepo: companion });
+    expect(readJustMeSettings(REPO_ID)).toEqual({ companionRepo: companion });
+
+    expect(() =>
+      updateJustMeSettings(REPO_ID, { companionRepo: { path: 'companion', appFolder: 'app' } })
+    ).toThrow(/absolute path/);
+
+    updateJustMeSettings(REPO_ID, { companionRepo: null });
+    expect(readJustMeSettings(REPO_ID)).toEqual({});
+  });
+
   it('merges scripts one at a time, and drops the group once empty', () => {
     updateJustMeSettings(REPO_ID, { scripts: { setup: 'pnpm i', teardown: 'make down' } });
     updateJustMeSettings(REPO_ID, { scripts: { setup: null } });

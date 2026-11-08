@@ -1,9 +1,9 @@
-import { resolve } from 'node:path';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type { AgentProviderId } from '@shared/agent-provider-registry';
 import { err, ok, type Result } from '@shared/result';
 import {
   getPrimaryWorktreeRow,
+  laneSessionCwd,
   resolveSessionWorktreeRow,
 } from '@main/core/worktrees/worktree-lookup';
 import { db } from '@main/db/client';
@@ -29,7 +29,7 @@ export function resolveTargetSessionCwd(
       message: "That session's worktree has been archived.",
     });
   }
-  return ok(resolve(worktree.path));
+  return ok(laneSessionCwd(worktree));
 }
 
 /**
@@ -64,5 +64,5 @@ export function resolveNewChatSessionWorktree(workItemId: string): {
   cwd: string;
 } {
   const primary = getPrimaryWorktreeRow(workItemId);
-  return { worktreeId: primary.id, cwd: resolve(primary.path) };
+  return { worktreeId: primary.id, cwd: laneSessionCwd(primary) };
 }

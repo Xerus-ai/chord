@@ -27,6 +27,8 @@ export interface Worktree {
   forkSource: ForkSource | null;
   /** 'adopted': the user's own checkout, which Chord never changes (`@shared/worktree-sources`). */
   checkoutOrigin: CheckoutOrigin;
+  /** The companion repository's worktree this lane's checkout is nested in, where its sessions start. */
+  companionPath: string | null;
   isPrimary: boolean;
   title: string | null;
   createdAt: number;

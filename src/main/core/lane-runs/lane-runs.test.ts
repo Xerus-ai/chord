@@ -4,7 +4,8 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { laneRunChangedChannel } from '@shared/events/laneRunEvents';
 import { db } from '@main/db/client';
-import { repos, workItems, workItemWorktrees } from '@main/db/schema-work-items';
+import { workItemWorktrees } from '@main/db/schema-work-items';
+import { emitted } from '@main/lib/_stand-ins/renderer-events';
 import {
   addLane,
   approveLaneAsIs,
@@ -13,19 +14,14 @@ import {
   insertRepoAndItems,
   neverAsk,
   readLaneRow,
-  removeLaneRepo,
   samePath,
   waitForPid,
   waitForRunProcess,
   type LaneRepo,
 } from './_testing/lane-run-fixture';
+import { tearDownLaneRepo } from './_testing/lane-run-suite';
 import { isRunning } from './_testing/run-process';
-import {
-  readLaneRunState,
-  releaseLaneRuns,
-  stopEveryLaneRun,
-  stopLaneRun,
-} from './lane-run-registry';
+import { readLaneRunState, stopEveryLaneRun, stopLaneRun } from './lane-run-registry';
 import { restartLaneRun, startLaneRun } from './start-lane-run';
 
 /**
@@ -36,26 +32,19 @@ import { restartLaneRun, startLaneRun } from './start-lane-run';
  * are substituted — the emitter needs Electron's main process, and what it
  * would announce is captured here.
  */
-vi.mock('@main/db/client', async () => {
-  const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
-  return { db: createMigratedTestDb() };
-});
+vi.mock('@main/db/client', () => import('@main/db/_testing/test-db-client'));
 
-const emitted = vi.hoisted(() => [] as { channel: string; payload: unknown }[]);
-vi.mock('@main/lib/events', () => ({
-  events: {
-    emit: (channel: { name: string }, payload: unknown) =>
-      emitted.push({ channel: channel.name, payload }),
-    // Main's adapter only hears what the renderer sends; nothing does here.
-    on: () => () => {},
-    once: () => () => {},
-  },
-}));
+vi.mock('@main/lib/events', () => import('@main/lib/_stand-ins/renderer-events'));
 
 const ITEM_ID = 'item-1';
 const SECOND_ITEM_ID = 'item-2';
 const LANE_ID = 'lane-1';
 const SECOND_LANE_ID = 'lane-2';
+
+/** Changes the first lane's row as the app would (its setup state, its checkout path). */
+function updateLaneRow(values: Partial<typeof workItemWorktrees.$inferInsert>): void {
+  db.update(workItemWorktrees).set(values).where(eq(workItemWorktrees.id, LANE_ID)).run();
+}
 
 const TEAM_CONFIG = {
   scripts: {
@@ -86,13 +75,7 @@ describe('lane runs', () => {
     await approveLaneAsIs(LANE_ID);
   });
 
-  afterEach(async () => {
-    await releaseLaneRuns(LANE_ID);
-    await releaseLaneRuns(SECOND_LANE_ID);
-    db.delete(workItems).run();
-    db.delete(repos).run();
-    await removeLaneRepo(repo);
-  });
+  afterEach(() => tearDownLaneRepo(repo, [LANE_ID, SECOND_LANE_ID]));
 
   it("runs a script in the lane's checkout with the lane's env, and records its exit", async () => {
     const started = await startLaneRun({ laneId: LANE_ID, scriptId: 'env' }, neverAsk);
@@ -198,10 +181,7 @@ describe('lane runs', () => {
   it.each(['pending', 'running'] as const)(
     'says setup_running while setup is %s (dependencies may be missing)',
     async (setupStatus) => {
-      db.update(workItemWorktrees)
-        .set({ setupStatus })
-        .where(eq(workItemWorktrees.id, LANE_ID))
-        .run();
+      updateLaneRow({ setupStatus });
 
       expect(await startLaneRun({ laneId: LANE_ID, scriptId: 'env' }, neverAsk)).toEqual({
         success: false,
@@ -212,10 +192,7 @@ describe('lane runs', () => {
   );
 
   it('says checkout_missing when the lane has no checkout on disk', async () => {
-    db.update(workItemWorktrees)
-      .set({ path: path.join(repo.root, 'pool', 'gone') })
-      .where(eq(workItemWorktrees.id, LANE_ID))
-      .run();
+    updateLaneRow({ path: path.join(repo.root, 'pool', 'gone') });
 
     expect(await startLaneRun({ laneId: LANE_ID, scriptId: 'env' }, neverAsk)).toEqual({
       success: false,
