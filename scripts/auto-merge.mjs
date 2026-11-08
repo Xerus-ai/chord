@@ -18,7 +18,8 @@
 // The verifier's and the permit's statuses count only from `--trusted-creator`, the login GitHub
 // gives the chord-verifier App's statuses (`chord-verifier[bot]`, devstation-4x42.248): the agents'
 // token can post any context, so a status of those contexts from any other identity is absent.
-// The tier's status needs no such trust: it can only make the computed tier stricter.
+// The tier's status needs no such trust: it can only make the computed tier stricter, and every
+// one on the head counts, so a `high` stays high whatever is posted after it (devstation-4x42.270).
 import { existsSync, readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
@@ -120,8 +121,10 @@ function latestRuns(runs, ignored) {
   return [...byName.values()];
 }
 
-/** { ok } | { block } | { wait }, each with why. */
-function judge(pr, statuses, runs, computed, opts) {
+/** { ok } | { block } | { wait }, each with why. tierPosts: every `risk-tier` status on the head,
+ *  not only the newest: any creator may post one, so a later `low` must not undo a `high`
+ *  (devstation-4x42.270). A tier can only get stricter on a head; a new head starts over. */
+function judge(pr, statuses, tierPosts, runs, computed, opts) {
   if (pr.state !== 'OPEN') return { wait: `the PR is ${String(pr.state).toLowerCase()}` };
   if (pr.isDraft) return { wait: 'the PR is a draft' };
   if (pr.baseRefName !== opts.base)
@@ -134,18 +137,20 @@ function judge(pr, statuses, runs, computed, opts) {
   const verifier = statuses.get(opts.verifier);
   if (verifier && verifier.state !== 'success' && verifier.state !== 'pending')
     return { block: `${opts.verifier} is ${verifier.state}: ${verifier.description}` };
-  const tier = statuses.get(opts.tier);
-  if (!tier) return { wait: `no ${opts.tier} status on the head yet` };
+  if (tierPosts.length === 0) return { wait: `no ${opts.tier} status on the head yet` };
   if (!verifier || verifier.state === 'pending')
     return { wait: `no ${opts.verifier} status on the head yet` };
   if (latest.length === 0) return { wait: 'no check run on the head yet' };
   const running = latest.find((r) => r.status !== 'completed');
   if (running) return { wait: `check ${running.name} is ${running.status}` };
-  const posted = String(tier.description);
-  const level = posted.split(':')[0].trim();
-  if (level !== 'low' && level !== 'high')
-    return { block: `${opts.tier} status reads '${posted}', neither low nor high` };
-  const postedWhy = level === 'high' ? [posted.slice('high:'.length).trim() || 'posted high'] : [];
+  const postedWhy = new Set();
+  for (const post of tierPosts) {
+    const posted = String(post.description);
+    const level = posted.split(':')[0].trim();
+    if (level !== 'low' && level !== 'high')
+      return { block: `${opts.tier} status reads '${posted}', neither low nor high` };
+    if (level === 'high') postedWhy.add(posted.slice('high:'.length).trim() || 'posted high');
+  }
   const because = [...postedWhy, ...computed];
   if (because.length === 0) return { ok: 'low tier, every check green, verifier APPROVE' };
   if (statuses.get(opts.permit)?.state === 'success')
@@ -158,7 +163,8 @@ function judge(pr, statuses, runs, computed, opts) {
 
 export function decide(pr, statusList, checks, computed, opts) {
   const statuses = latestStatuses(statusList, opts.trusted, [opts.verifier, opts.permit]);
-  const verdict = judge(pr, statuses, checks.check_runs ?? [], computed, opts);
+  const tierPosts = statusList.filter((s) => s.context === opts.tier);
+  const verdict = judge(pr, statuses, tierPosts, checks.check_runs ?? [], computed, opts);
   const on = pr.autoMergeRequest != null;
   if (verdict.ok)
     return on

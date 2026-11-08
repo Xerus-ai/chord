@@ -371,6 +371,31 @@ describe('verifier and permit count only from the chord-verifier App (devstation
     expect(decide(pr(), [tierHigh, approve, appPermit], green).action).toBe('enable');
   });
 
+  it('a low tier posted after a high one leaves the head high (devstation-4x42.270)', () => {
+    // The recorded head's tier is high; the agents' token then posts low on the same head.
+    const forgedLow = status('risk-tier', 'success', 'low', TOKEN_USER);
+    const recordedHigh = waitsForPermit(
+      '31878 counted lines changed, more than max_changed_lines 300'
+    );
+    expect(decide(pr(), [...RECORDED, approve, forgedLow], green)).toEqual({
+      action: 'none',
+      reason: recordedHigh,
+    });
+    // Whatever the list order, and with auto-merge already on, it is turned off.
+    const on = pr({ autoMergeRequest: { mergeMethod: 'MERGE' } });
+    expect(decide(on, [forgedLow, approve, ...RECORDED], green)).toEqual({
+      action: 'disable',
+      reason: recordedHigh,
+    });
+    // Each posted high reason counts, and the permit still opens it.
+    const label = status('risk-tier', 'success', 'high: label area:db', TOKEN_USER);
+    expect(decide(pr(), [tierLow, label, forgedLow, approve], green).reason).toBe(
+      waitsForPermit('label area:db')
+    );
+    const permit = status('permit', 'success', 'granted');
+    expect(decide(pr(), [label, forgedLow, approve, permit], green).action).toBe('enable');
+  });
+
   it('refuses to decide without the trusted creator or from a status it cannot read', () => {
     const none = run(pr(), [tierLow, approve], green, small, []);
     expect(none.status).toBe(2);
