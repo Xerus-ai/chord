@@ -1,4 +1,4 @@
-import type { AgentStartMode } from '@main/core/repo-config/resolve-repo-config';
+import type { AgentStartMode } from '@shared/repo-config';
 import type { LaneReadiness } from '@main/core/worktrees/lane-readiness';
 
 /**

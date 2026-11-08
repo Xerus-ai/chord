@@ -3,6 +3,14 @@ import { eq } from 'drizzle-orm';
 import z from 'zod';
 import { gitAiOverrideSchema } from '@shared/git-ai';
 import {
+  AGENT_START_MODES,
+  type AgentStartMode,
+  type RepoJustMeSettings,
+  type Resolved,
+  type ResolvedRepoConfig,
+  type ScriptKind,
+} from '@shared/repo-config';
+import {
   buildRunScriptsSchema,
   expandRunScripts,
   type RunMode,
@@ -18,24 +26,13 @@ import { readTeamConfigAtRef } from './read-team-config';
 
 /**
  * One answer to "what is this repository's setting X", with where it came
- * from. Resolution is per key: built-in < Team file (`.chord.json` at the
- * lane's target ref) < Just me (`repo_settings.overrides`).
+ * from. The shapes are `@shared/repo-config`'s; this file validates and
+ * resolves them.
  */
 
-export type ConfigLayer = 'default' | 'team' | 'justMe';
-export type Resolved<T> = { value: T; layer: ConfigLayer };
-
-export const AGENT_START_MODES = ['waitForSetup', 'immediately'] as const;
-export type AgentStartMode = (typeof AGENT_START_MODES)[number];
-
-/** The scripts that are one command each; `run` is a set of named ones (`@shared/run-scripts`). */
-export const SCRIPT_KINDS = ['setup', 'test', 'teardown'] as const;
-export type ScriptKind = (typeof SCRIPT_KINDS)[number];
-
 /**
- * This machine's overrides for one repository. A just-me script is the
- * user's own — it replaces the team's script of that kind and runs without
- * an approval, since nobody else wrote it.
+ * This machine's overrides for one repository (`RepoJustMeSettings`). Its
+ * inferred type is held equal to that shape by resolve-repo-config.test.ts.
  */
 export const repoJustMeSettingsSchema = z
   .object({
@@ -79,26 +76,6 @@ export const repoJustMeSettingsSchema = z
     companionRepo: companionRepoSchema.optional(),
   })
   .strict();
-
-export type RepoJustMeSettings = z.infer<typeof repoJustMeSettingsSchema>;
-
-export interface ResolvedRepoConfig {
-  ref: string;
-  /** Blob OID of the team file the team values came from. */
-  oid: string | null;
-  /** Null means "the remote's default branch". */
-  baseBranch: Resolved<string | null>;
-  /** Null means the preferred remote (`origin`, else the first). */
-  remote: Resolved<string | null>;
-  filesToCopy: Resolved<string[]>;
-  /** `run` maps script id to command; a team or just-me string is id `default`. */
-  scripts: Record<ScriptKind, Resolved<string | null>> & { run: Resolved<RunScriptMap> };
-  runMode: Resolved<RunMode>;
-  shellSetup: Resolved<string | null>;
-  tmux: Resolved<boolean>;
-  agentStart: Resolved<AgentStartMode>;
-  keepLocalBaseUpToDate: Resolved<boolean>;
-}
 
 /** Throws on stored overrides it cannot read — a corrupt row is a bug, not "no overrides". */
 export function readJustMeSettings(repoId: string | null): RepoJustMeSettings {

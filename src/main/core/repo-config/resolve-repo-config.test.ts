@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { RepoJustMeSettings } from '@shared/repo-config';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
 import { db } from '@main/db/client';
@@ -9,7 +10,11 @@ import { repoSettings } from '@main/db/schema-repo-settings';
 import { repos } from '@main/db/schema-work-items';
 import { removeDirSync } from '@main/lib/remove-dir-sync';
 import { RepoConfigError } from './read-team-config';
-import { readJustMeSettings, resolveRepoConfig } from './resolve-repo-config';
+import {
+  readJustMeSettings,
+  repoJustMeSettingsSchema,
+  resolveRepoConfig,
+} from './resolve-repo-config';
 
 vi.mock('@main/db/client', async () => {
   const { createMigratedTestDb } = await import('@main/db/_testing/migrated-test-db');
@@ -22,6 +27,20 @@ async function git(args: string[], cwd: string): Promise<string> {
 }
 
 const REPO_ID = 'repo-1';
+
+describe('repoJustMeSettingsSchema', () => {
+  it('validates exactly the shared RepoJustMeSettings shape the renderer edits (devstation-4x42.261)', () => {
+    // tsc fails here when the schema and @shared/repo-config drift apart in either direction.
+    expectTypeOf<
+      ReturnType<typeof repoJustMeSettingsSchema.parse>
+    >().toEqualTypeOf<RepoJustMeSettings>();
+    const settings: RepoJustMeSettings = {
+      baseBranch: 'main',
+      companionRepo: { path: path.resolve(os.tmpdir(), 'companion'), appFolder: 'app' },
+    };
+    expect(repoJustMeSettingsSchema.parse(settings)).toEqual(settings);
+  });
+});
 
 describe('resolveRepoConfig', () => {
   let repoDir: string;

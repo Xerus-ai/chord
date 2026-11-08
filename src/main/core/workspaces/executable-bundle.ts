@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { ResolvedRepoConfig } from '@shared/repo-config';
 import { collapseRunScripts, expandRunScripts, type RunScriptsValue } from '@shared/run-scripts';
 import { LocalExecutionContext } from '@main/core/execution-context/local-execution-context';
-import type { ResolvedRepoConfig } from '@main/core/repo-config/resolve-repo-config';
 import { GIT_EXECUTABLE } from '@main/core/utils/exec';
 import { readDefinitionCode, readDefinitionCodeAtRef } from './claude-definition-files';
 

@@ -1,10 +1,8 @@
 import { eq } from 'drizzle-orm';
+import type { ResolvedRepoConfig } from '@shared/repo-config';
 import { readFetchRemoteUrl } from '@main/core/repo-config/fetch-remote-url';
 import { resolveDefaultBaseRef } from '@main/core/repo-config/resolve-lane-base';
-import {
-  resolveRepoConfig,
-  type ResolvedRepoConfig,
-} from '@main/core/repo-config/resolve-repo-config';
+import { resolveRepoConfig } from '@main/core/repo-config/resolve-repo-config';
 import {
   buildExecutableBundle,
   collectChordScripts,

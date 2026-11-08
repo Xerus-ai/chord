@@ -2,51 +2,25 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
-import type { RunMode, RunScriptsValue } from '@shared/run-scripts';
-import type { WorktreeSourceVisibility } from '@shared/worktree-sources';
+import type { JustMePatch, RepoJustMeSettings, TeamConfigPatch } from '@shared/repo-config';
 import { db } from '@main/db/client';
 import { repoSettings } from '@main/db/schema-repo-settings';
 import { repos } from '@main/db/schema-work-items';
 import { parseTeamConfig, TEAM_CONFIG_FILE } from './read-team-config';
-import {
-  readJustMeSettings,
-  repoJustMeSettingsSchema,
-  type RepoJustMeSettings,
-  type ScriptKind,
-} from './resolve-repo-config';
+import { readJustMeSettings, repoJustMeSettingsSchema } from './resolve-repo-config';
 import { assertTeamFileOnBase } from './team-file-lineage';
 
 /**
- * The repository page's two write paths. In both, `null` clears a value so
- * the layer below applies again.
+ * The repository page's two write paths (patch shapes: `@shared/repo-config`).
+ * In both, `null` clears a value so the layer below applies again.
  *   - Just me: this machine's `repo_settings.overrides`.
  *   - Team: the main checkout's `.chord.json`, written and left uncommitted.
  *     Lanes read the file at their base ref, so a team edit applies once the
  *     user commits it and it reaches that ref — Chord never commits or pushes.
  */
 
-/** A run value replaces the whole set of run scripts: named ones are not merged per id. */
-type ScriptsPatch = Partial<Record<ScriptKind, string | null>> & { run?: RunScriptsValue | null };
-type WorktreeSourcesPatch = {
-  [K in keyof NonNullable<RepoJustMeSettings['worktreeSources']>]?: WorktreeSourceVisibility | null;
-};
-
 /** Groups merged key by key, each dropped once empty. */
 const NESTED_KEYS = new Set(['scripts', 'worktreeSources']);
-
-export type JustMePatch = {
-  [K in Exclude<keyof RepoJustMeSettings, 'scripts' | 'worktreeSources'>]?:
-    | RepoJustMeSettings[K]
-    | null;
-} & { scripts?: ScriptsPatch; worktreeSources?: WorktreeSourcesPatch };
-
-export interface TeamConfigPatch {
-  baseBranch?: string | null;
-  filesToCopy?: string[] | null;
-  shellSetup?: string | null;
-  runMode?: RunMode | null;
-  scripts?: ScriptsPatch;
-}
 
 function applyPatch(
   current: Record<string, unknown>,

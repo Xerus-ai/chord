@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
+import type { RepoJustMeSettings, ResolvedRepoConfig } from '@shared/repo-config';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { resolveLanePoolPath } from '@main/core/work-items/lane-pool-path';
 import {
@@ -23,12 +24,7 @@ import {
   TEAM_CONFIG_FILE,
 } from './read-team-config';
 import { resolveDefaultBaseRef } from './resolve-lane-base';
-import {
-  readJustMeSettings,
-  resolveRepoConfig,
-  type RepoJustMeSettings,
-  type ResolvedRepoConfig,
-} from './resolve-repo-config';
+import { readJustMeSettings, resolveRepoConfig } from './resolve-repo-config';
 import { describeTeamFileOffBase } from './team-file-lineage';
 
 /**

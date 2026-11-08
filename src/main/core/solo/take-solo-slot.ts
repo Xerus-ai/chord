@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
 import type { LaneRunHost } from '@shared/lane-runs';
+import type { ResolvedRepoConfig } from '@shared/repo-config';
 import { err, ok, type Result } from '@shared/result';
 import type { SoloLaneError, SoloRunStart } from '@shared/solo';
 import { startLaneRun } from '@main/core/lane-runs/start-lane-run';
 import { RepoConfigError } from '@main/core/repo-config/read-team-config';
-import type { ResolvedRepoConfig } from '@main/core/repo-config/resolve-repo-config';
 import type { AskScriptApproval } from '@main/core/workspaces/ask-script-approval';
 import { resolveLaneBundle } from '@main/core/worktrees/lane-bundle';
 import { findWorktreeRow } from '@main/core/worktrees/worktree-lookup';
