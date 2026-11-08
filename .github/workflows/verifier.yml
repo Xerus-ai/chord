@@ -56,7 +56,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -64,8 +64,10 @@ jobs:
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           git -C pr -c "http.extraheader=AUTHORIZATION: basic $auth" fetch -q --depth=1 "https://github.com/$REPO.git" "$HEAD"
           git -C pr -c core.hooksPath=/dev/null -c filter.lfs.smudge= -c filter.lfs.process= checkout -q FETCH_HEAD
-          gh pr diff "$PR" -R "$REPO" > "$RUNNER_TEMP/diff.patch"
-          gh pr view "$PR" -R "$REPO" --json number,title,body,headRefOid > "$RUNNER_TEMP/pr.json"
+          # The diff and the PR text as of the event's head, the one the status is posted on: a
+          # push after the event does not change what this run reviews.
+          gh api "repos/$REPO/compare/$BASE...$HEAD" -H "Accept: application/vnd.github.diff" > "$RUNNER_TEMP/diff.patch"
+          jq '.pull_request | {number, title, body, head: .head.sha}' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
       - name: Review the diff (harness.json verifier.cmd's limits)
         working-directory: pr
         env:
@@ -85,6 +87,7 @@ jobs:
           claude -p --model opus --tools Read,Grep,Glob --setting-sources "" --strict-mcp-config \
             --no-session-persistence --output-format text --effort high \
             --system-prompt "$(cat ../base/.github/verifier/system-prompt.md)" \
+            --append-system-prompt "$(cat ../base/.github/verifier/ci-context.md)" \
             < "$RUNNER_TEMP/input.md" > "$RUNNER_TEMP/review.txt"
       - name: The verdict
         id: verdict
