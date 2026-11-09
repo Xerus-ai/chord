@@ -21,7 +21,7 @@ export const appController = createRPCController({
   },
   clipboardWriteText: async (text: string) => {
     try {
-      appService.clipboardWriteText(text);
+      await appService.clipboardWriteText(text);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };

@@ -3,10 +3,11 @@ packages:
   - 'server'
   - 'packages/*'
 
+# better-sqlite3 13 loads the N-API prebuild it ships, and its own build step (node-gyp 8) fails.
+# electron 42+ has no install script: scripts/postinstall.ts runs its install.js.
+# node-pty is the one module built for Electron's ABI (pnpm run rebuild).
 onlyBuiltDependencies:
-  - better-sqlite3
   - core-js
-  - electron
   - esbuild
   - node-pty
   - protobufjs

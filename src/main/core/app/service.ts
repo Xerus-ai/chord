@@ -167,9 +167,9 @@ class AppService implements IInitializable, IDisposable {
     await shell.openExternal(url);
   }
 
-  clipboardWriteText(text: string): void {
+  async clipboardWriteText(text: string): Promise<void> {
     if (typeof text !== 'string') throw new Error('Invalid clipboard text');
-    clipboard.writeText(text);
+    await clipboard.writeText(text);
   }
 
   async openIn(args: {

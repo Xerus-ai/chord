@@ -1,8 +1,26 @@
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Since Electron 42 the `electron` package has no postinstall script of its own: its binary
+ * arrives only when something runs its `install.js` (the `install-electron` bin). Run it here,
+ * before the CI early exit below, so every install (CI included) leaves a runnable binary.
+ */
+function installElectronBinary() {
+  const installScript = createRequire(import.meta.url).resolve('electron/install.js');
+  const result = spawnSync(process.execPath, [installScript], { stdio: 'inherit' });
+  if (result.error) {
+    console.error('postinstall: failed to run electron/install.js:', result.error);
+  }
+  if (result.status === 0) return;
+  process.exit(typeof result.status === 'number' ? result.status : 1);
+}
+
+installElectronBinary();
 
 if (process.env.CI || process.env.CHORD_SKIP_ELECTRON_REBUILD === '1') {
   process.exit(0);
@@ -14,20 +32,19 @@ function getElectronRebuildBin() {
   return path.resolve(__dirname, '..', 'node_modules', '.bin', binName);
 }
 
-function runElectronRebuild(onlyModules) {
+function runElectronRebuild(onlyModules: string[]) {
   const electronRebuildBin = getElectronRebuildBin();
-  const args = ['-f'];
-
-  if (onlyModules && onlyModules.length > 0) {
-    args.push('--only', onlyModules.join(','));
-  }
+  const args = ['-f', '--only', onlyModules.join(',')];
 
   // node-pty's winpty.gyp runs `cd shared && GetCommitHash.bat`, which needs cmd
   // to search the current directory. Agent and CI shells set
   // NoDefaultCurrentDirectoryInExePath=1, which disables that and breaks the
-  // rebuild, so the child build never sees it.
+  // rebuild, so the child build never sees it. Windows env names are
+  // case-insensitive and a shell can pass it in any case, so match ignoring case.
   const env = { ...process.env };
-  delete env.NoDefaultCurrentDirectoryInExePath;
+  for (const name of Object.keys(env)) {
+    if (name.toLowerCase() === 'nodefaultcurrentdirectoryinexepath') delete env[name];
+  }
 
   const result =
     process.platform === 'win32'
@@ -42,15 +59,8 @@ function runElectronRebuild(onlyModules) {
   process.exit(typeof result.status === 'number' ? result.status : 1);
 }
 
-const disablePty = process.env.CHORD_DISABLE_PTY === '1';
-const disableNativeDb = process.env.CHORD_DISABLE_NATIVE_DB === '1';
-
-const nativeModules: string[] = [];
-if (!disableNativeDb) nativeModules.push('better-sqlite3');
-if (!disablePty) nativeModules.push('node-pty');
-
-if (nativeModules.length === 0) {
-  process.exit(0);
+// node-pty is the one native module built for Electron's ABI: better-sqlite3 13 is N-API and
+// loads the prebuild it ships.
+if (process.env.CHORD_DISABLE_PTY !== '1') {
+  runElectronRebuild(['node-pty']);
 }
-
-runElectronRebuild(nativeModules);

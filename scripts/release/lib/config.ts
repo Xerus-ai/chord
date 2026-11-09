@@ -8,7 +8,8 @@ export {
 } from '../../../src/shared/app-identity.ts';
 
 export const RELEASE_DIR = 'release';
-export const NATIVE_MODULES = ['better-sqlite3', 'node-pty', '@parcel/watcher'];
+// better-sqlite3 13 is N-API and ships a prebuild per platform, so it is not rebuilt per arch.
+export const NATIVE_MODULES = ['node-pty', '@parcel/watcher'];
 
 export function requireEnv(name: string): string {
   const val = process.env[name];
