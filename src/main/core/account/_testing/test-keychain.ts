@@ -1,3 +1,5 @@
+import type { SafeStorage } from 'electron';
+
 /**
  * The OS keychain for main-process suites that sign in through the real
  * account path (`test-account.ts`). Electron's `safeStorage` does not exist
@@ -8,20 +10,59 @@
  * The account service, the `kv` profile, the credential store and the
  * database all stay real.
  *
- * Imports nothing: the `electron` mock factory loads this module, and any
- * import that reaches `electron` again would wait on the factory forever.
+ * Only the async API exists here (Electron 45 deprecates the sync one and 46
+ * removes it), so a leftover sync call fails every suite that uses this.
+ *
+ * Imports nothing at run time: the `electron` mock factory loads this module,
+ * and any import that reaches `electron` again would wait on the factory
+ * forever. The type import is erased.
  */
-export function electronWithTestKeychain(): { safeStorage: Record<string, unknown> } {
+export type TestSafeStorage = Pick<
+  SafeStorage,
+  | 'isAsyncEncryptionAvailable'
+  | 'encryptStringAsync'
+  | 'decryptStringAsync'
+  | 'getSelectedStorageBackend'
+>;
+
+/** The seal of the key before a rotation: what the last release's sync `encryptString` wrote. */
+export const SEAL_PREVIOUS = 'test-keychain:';
+/** The seal of the key after a rotation. */
+export const SEAL_ROTATED = 'test-keychain-rotated:';
+
+export interface TestSafeStorageOptions {
+  /** `isAsyncEncryptionAvailable()`; default true. */
+  available?: boolean;
+  /** `getSelectedStorageBackend()`; default `gnome_libsecret`. */
+  backend?: ReturnType<SafeStorage['getSelectedStorageBackend']>;
+  /**
+   * The keychain key has rotated: new seals use `SEAL_ROTATED`, and a
+   * `SEAL_PREVIOUS` seal still opens but asks for re-encryption.
+   */
+  rotated?: boolean;
+}
+
+export function testSafeStorage(options: TestSafeStorageOptions = {}): TestSafeStorage {
+  const { available = true, backend = 'gnome_libsecret', rotated = false } = options;
+  const currentSeal = rotated ? SEAL_ROTATED : SEAL_PREVIOUS;
   return {
-    safeStorage: {
-      isEncryptionAvailable: () => true,
-      getSelectedStorageBackend: () => 'gnome_libsecret',
-      encryptString: (value: string) => Buffer.from(`test-keychain:${value}`, 'utf8'),
-      decryptString: (encrypted: Buffer) => {
-        const text = encrypted.toString('utf8');
-        if (!text.startsWith('test-keychain:')) throw new Error('Not sealed by the test keychain');
-        return text.slice('test-keychain:'.length);
-      },
+    isAsyncEncryptionAvailable: async () => available,
+    getSelectedStorageBackend: () => backend,
+    encryptStringAsync: async (plainText: string) =>
+      Buffer.from(`${currentSeal}${plainText}`, 'utf8'),
+    decryptStringAsync: async (encrypted: Buffer) => {
+      const text = encrypted.toString('utf8');
+      if (text.startsWith(currentSeal)) {
+        return { shouldReEncrypt: false, result: text.slice(currentSeal.length) };
+      }
+      if (rotated && text.startsWith(SEAL_PREVIOUS)) {
+        return { shouldReEncrypt: true, result: text.slice(SEAL_PREVIOUS.length) };
+      }
+      throw new Error('Not sealed by the test keychain');
     },
   };
+}
+
+export function electronWithTestKeychain(): { safeStorage: TestSafeStorage } {
+  return { safeStorage: testSafeStorage() };
 }
