@@ -41,6 +41,31 @@ describe('the verifier status of a review (devstation-4x42.248)', () => {
     expect(verdictOf(text)).toEqual({ state: 'success', description: 'APPROVE' });
   });
 
+  it('a REQUEST_CHANGES whose findings are all P3 is success (devstation-4x42.293, option A)', () => {
+    const findings = [
+      { severity: 'P3', file: 'a.ts', line: 1, issue: 'x' },
+      { severity: 'P3', file: 'b.ts', line: 2, issue: 'y' },
+    ];
+    const text = `Two nits.\n${JSON.stringify({ verdict: 'REQUEST_CHANGES', findings })}\n`;
+    expect(verdictOf(text)).toEqual({ state: 'success', description: 'APPROVE with 2 P3' });
+  });
+
+  it('a P3 beside a P2, an unrated finding, or no findings at all still fails', () => {
+    const rc = (findings: unknown[]) => JSON.stringify({ verdict: 'REQUEST_CHANGES', findings });
+    expect(verdictOf(rc([{ severity: 'P3' }, { severity: 'P2' }]))).toEqual({
+      state: 'failure',
+      description: 'REQUEST_CHANGES: 1 P2, 1 P3',
+    });
+    expect(verdictOf(rc([{ severity: 'P3' }, { issue: 'no severity' }]))).toEqual({
+      state: 'failure',
+      description: 'REQUEST_CHANGES: 1 P3, 1 unrated',
+    });
+    expect(verdictOf(rc([]))).toEqual({
+      state: 'failure',
+      description: 'REQUEST_CHANGES: no findings listed',
+    });
+  });
+
   it('REQUEST_CHANGES is failure, its findings counted by severity', () => {
     const findings = [
       { severity: 'P2', file: 'a.ts', line: 1, issue: 'x' },

@@ -4,9 +4,11 @@
 // answer ends in one JSON line {"verdict": "APPROVE" | "REQUEST_CHANGES", "findings": [...]}; this
 // reads that answer's file and prints the step outputs `state=` and `description=` for
 // $GITHUB_OUTPUT. The verdict line is found as the harness's verify-run.py finds it: the last line
-// that is a JSON object with a known verdict and a findings list. APPROVE is success,
-// REQUEST_CHANGES failure (with its findings counted by severity), and an answer without a verdict
-// line is error: nothing approves a review that said nothing. A file it cannot read exits 2.
+// that is a JSON object with a known verdict and a findings list. APPROVE is success, and so is a
+// REQUEST_CHANGES whose findings are all P3 (devstation-4x42.293, the user's option A: a P3 is
+// deferred, as the harness's own rounds defer it); any other REQUEST_CHANGES is failure (with its
+// findings counted by severity), and an answer without a verdict line is error: nothing approves a
+// review that said nothing. A file it cannot read exits 2.
 //
 // Under Actions (GITHUB_ACTIONS=true) it also keeps the review (devstation-4x42.292): it appends the
 // findings to $GITHUB_STEP_SUMMARY and writes the verdict to $RUNNER_TEMP/verifier-verdict.json, the
@@ -18,6 +20,7 @@ import { join } from 'node:path';
 
 const VERDICTS = new Set(['APPROVE', 'REQUEST_CHANGES']);
 const MAX_DESCRIPTION = 140; // GitHub's limit on a commit status description
+const DEFERRED = 'P3'; // the one severity that does not block a merge
 const MAX_TAIL = 4000; // characters of an answer without a verdict line kept in the summary
 export const VERDICT_FILE = 'verifier-verdict.json';
 
@@ -48,6 +51,8 @@ function statusOfVerdict(verdict) {
   if (!verdict) return { state: 'error', description: 'the review ended without a verdict line' };
   if (verdict.verdict === 'APPROVE') return { state: 'success', description: 'APPROVE' };
   const { findings } = verdict;
+  if (findings.length > 0 && findings.every((f) => severityOf(f) === DEFERRED))
+    return { state: 'success', description: `APPROVE with ${findings.length} ${DEFERRED}` };
   const bySeverity = new Map();
   for (const f of findings) bySeverity.set(severityOf(f), (bySeverity.get(severityOf(f)) ?? 0) + 1);
   const counts = [...bySeverity].sort().map(([s, n]) => `${n} ${s}`);
