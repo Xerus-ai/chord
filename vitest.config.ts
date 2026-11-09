@@ -22,6 +22,13 @@ const nodeTestEnv = {
   WORKOS_CLIENT_ID: 'chord-test-client',
   WORKOS_REDIRECT_URI: 'http://127.0.0.1:9/callback',
   WORKOS_AUTHKIT_URL: 'http://127.0.0.1:9/authkit',
+  // `@shared/urls` reads these at module load; the app controller imports it.
+  CHORD_RELEASES_URL: 'http://127.0.0.1:9',
+  CHORD_DOCS_URL: 'http://127.0.0.1:9',
+  CHORD_TERMS_URL: 'http://127.0.0.1:9',
+  CHORD_PRIVACY_URL: 'http://127.0.0.1:9',
+  CHORD_ISSUES_URL: 'http://127.0.0.1:9',
+  CHORD_CLOUD_API_URL: 'http://127.0.0.1:9',
 };
 
 // Suites that start the installed `codex app-server`. A server still going

@@ -1,11 +1,12 @@
 import { join } from 'node:path';
 
 /**
- * The native module verify-mac.ts checks the arch of: better-sqlite3, rebuilt per arch by
- * rebuild-native.ts (NATIVE_MODULES) and unpacked from the asar so it can load.
+ * The native module verify-mac.ts checks the arch of: node-pty, rebuilt per arch by
+ * rebuild-native.ts (NATIVE_MODULES) and unpacked from the asar so it can load. better-sqlite3
+ * is not it: since 13 it loads the N-API prebuild it ships for each platform.
  */
 export function macNativeModule(appDir: string): { name: string; path: string } {
-  const name = 'better-sqlite3';
+  const name = 'node-pty';
   const path = join(
     appDir,
     'Contents',
@@ -15,7 +16,7 @@ export function macNativeModule(appDir: string): { name: string; path: string } 
     name,
     'build',
     'Release',
-    'better_sqlite3.node'
+    'pty.node'
   );
   return { name, path };
 }

@@ -39,6 +39,9 @@ const ADVISORIES: Array<[name: string, range: string, advisory: string]> = [
   ['rollup', '>=4.0.0 <4.59.0', 'GHSA-mw96-cpmx-2vgc'],
   ['postcss', '<=8.5.17', 'GHSA-r28c-9q8g-f849'],
   ['shell-quote', '<=1.8.4', 'GHSA-w7jw-789q-3m8p, GHSA-395f-4hp3-45gv'],
+  ['electron', '<41.10.6', 'GHSA-9qh4-3jw8-366w, GHSA-gr2m-v5gq-v685'],
+  ['electron', '>=42.0.0 <42.9.2', 'GHSA-9qh4-3jw8-366w, GHSA-gr2m-v5gq-v685'],
+  ['electron', '>=43.0.0 <43.4.1', 'GHSA-9qh4-3jw8-366w, GHSA-gr2m-v5gq-v685'],
 ];
 
 type Version = [number, number, number];
@@ -73,9 +76,9 @@ function locked(name: string): string[] {
 }
 
 describe('locked dependencies clear the chord-deps advisories', () => {
-  it('electron resolves to 40.10.6 and the rebuild script targets it', () => {
-    expect(locked('electron')).toEqual(['40.10.6']);
-    expect(pkg.scripts.rebuild).toMatch(/ -v 40\.10\.6 /);
+  it('electron resolves to 45.2.1 and the rebuild script targets it', () => {
+    expect(locked('electron')).toEqual(['45.2.1']);
+    expect(pkg.scripts.rebuild).toMatch(/ -v 45\.2\.1 /);
   });
 
   it('no locked version falls in a high or critical advisory range the judgement fixes', () => {

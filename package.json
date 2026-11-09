@@ -29,7 +29,7 @@
     "package:linux": "pnpm run build && electron-builder --linux --publish never --config electron-builder.config.ts",
     "package:win": "pnpm run build && electron-builder --win --publish never --config electron-builder.config.ts",
     "postinstall": "pnpm run build:protocol && node --experimental-strip-types scripts/postinstall.ts",
-    "rebuild": "electron-rebuild -f -v 40.10.6 --only=better-sqlite3,node-pty",
+    "rebuild": "electron-rebuild -f -v 45.2.1 --only=node-pty",
     "run:docker-ssh": "docker compose up --build -d",
     "clean": "rm -rf node_modules dist",
     "reset": "pnpm run clean && pnpm install",
@@ -55,7 +55,7 @@
     "pnpm": ">=10.28.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
+    "@electron/rebuild": "^4.2.1",
     "@eslint/js": "^9.0.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@tailwindcss/vite": "^4.2.1",
@@ -70,7 +70,7 @@
     "@xterm/headless": "^6.0.0",
     "concurrently": "^8.2.2",
     "drizzle-kit": "^0.24.2",
-    "electron": "^40.7.0",
+    "electron": "45.2.1",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "eslint": "^9.0.0",
@@ -128,7 +128,7 @@
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
     "allotment": "^1.20.5",
-    "better-sqlite3": "^12.6.0",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -179,11 +179,10 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "node-pty",
-      "electron"
+      "node-pty"
     ],
     "ignoredBuiltDependencies": [
+      "better-sqlite3",
       "core-js",
       "cpu-features",
       "esbuild",

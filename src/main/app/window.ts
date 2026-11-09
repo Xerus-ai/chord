@@ -70,7 +70,16 @@ export function createMainWindow(): BrowserWindow {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // Required for ESM preload scripts (.mjs)
+      // Kept off, re-checked for Electron 45 (devstation-2dgv.5):
+      // - The preload is ESM (.mjs), which a sandboxed renderer cannot load.
+      // - nodeIntegration is off, contextIsolation is on, and the bridge
+      //   exposes only invoke, eventSend/eventOn and getPathForFile.
+      // - GHSA-9qh4-3jw8-366w needs <webview>, which is off (below).
+      // - GHSA-gr2m-v5gq-v685 needs popups from a sandboxed top-level
+      //   document; artifact frames are CSP `sandbox allow-scripts`, without
+      //   allow-popups.
+      // - Both advisories are fixed in 45, and since 45 window.open children
+      //   default to a sandboxed process of their own.
       sandbox: false,
       // No <webview> exists in the renderer. Leaving the tag enabled with no
       // will-attach-webview handler would let any renderer-side script

@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'crypto';
 import { WorkOS } from '@workos-inc/node';
-import { app, clipboard, shell } from 'electron';
+import { app, shell } from 'electron';
 import { log } from '@main/lib/logger';
 import { ACCOUNT_CONFIG } from '../config';
 import { accountCredentialStore } from './credential-store';
+import { copyFreshLoginUrl } from './fresh-login-url';
 
 export interface WorkOSUser {
   userId: string;
@@ -97,18 +98,7 @@ export async function signInWithWorkOS(): Promise<{ user: WorkOSUser; tokens: Wo
   });
 
   if (process.env.CHORD_FORCE_FRESH_LOGIN) {
-    // Dev affordance for multi-account testing. The default browser's live
-    // AuthKit session silently re-authenticates the existing account (its
-    // session is reused even with max_age=0), so instead of opening the
-    // session-tainted default browser, put the URL on the clipboard for the
-    // developer to paste into a private/incognito window. max_age=0 is kept
-    // as documented belt-and-braces (SDK has no typed option for it).
-    const freshLoginUrl = `${authorizationUrl}&max_age=0`;
-    clipboard.writeText(freshLoginUrl);
-    log.info(
-      '[auth] CHORD_FORCE_FRESH_LOGIN — authorization URL copied to clipboard; ' +
-        'paste it into a private/incognito window to sign in with a different account.'
-    );
+    await copyFreshLoginUrl(authorizationUrl);
   } else {
     await shell.openExternal(authorizationUrl);
   }

@@ -14,8 +14,12 @@ export const APP_ORIGIN = `${APP_SCHEME}://${APP_NAME_LOWER}`;
  * renderer stops being a secure context (no `navigator.clipboard`, no
  * `crypto.randomUUID`). The artifact page scheme is `standard` so a page's
  * absolute URLs parse, and `secure` so the frame is a secure context; fetch
- * and CORS are deliberately off for it — nothing in the frame may `fetch()`
+ * is deliberately off for it — nothing in the frame may `fetch()`
  * (`connect-src 'none'`) and the renderer never fetches page assets itself.
+ * CORS is on only so the opaque-origin (CSP-sandboxed) page document can load
+ * its own module scripts: a module script is a CORS load, which Chromium 156
+ * (Electron 45) refuses from a scheme without CORS. The responses grant only
+ * the `null` origin (`page-response-headers.ts`).
  */
 export function registerPrivilegedSchemes(): void {
   protocol.registerSchemesAsPrivileged([
@@ -38,7 +42,7 @@ export function registerPrivilegedSchemes(): void {
         standard: true,
         secure: true,
         supportFetchAPI: false,
-        corsEnabled: false,
+        corsEnabled: true,
         allowServiceWorkers: false,
       },
     },

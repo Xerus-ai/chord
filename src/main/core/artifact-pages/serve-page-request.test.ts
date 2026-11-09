@@ -163,6 +163,21 @@ describe('handleArtifactPageRequest — isolation headers on every response', ()
     expectIsolationHeaders(response);
   });
 
+  it("grants module script loads to the page's opaque origin and nothing more", async () => {
+    // The frame is CSP-sandboxed (origin `null`) and loads its runtime and bundle as module
+    // scripts, a CORS load Chromium 156 (Electron 45) refuses without a CORS grant.
+    const responses = await Promise.all(
+      ['/__chord/chord-page.js', '/__chord/chunks/mermaid.core-ABC.js', '/'].map((path) =>
+        handleArtifactPageRequest(request(path), runtimeDir)
+      )
+    );
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('null');
+      expect(response.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+    }
+  });
+
   it("pins script and style sources to the page's own origin, not the whole scheme", () => {
     const csp = artifactPageCsp(HTML_ARTIFACT_ID);
     expect(csp).toContain(`script-src 'unsafe-inline' chord-artifact://${HTML_ARTIFACT_ID}`);

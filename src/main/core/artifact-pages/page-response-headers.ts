@@ -70,7 +70,16 @@ export function contentTypeForPath(filePath: string): string {
   return CONTENT_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
 }
 
-/** Every response — bodies, errors, 404s — carries the same isolation headers. */
+/**
+ * Every response — bodies, errors, 404s — carries the same isolation headers.
+ *
+ * `Access-Control-Allow-Origin: null` lets the page's opaque-origin document
+ * load its own `runtime.js` and `bundle.js` as module scripts, a CORS load
+ * Chromium 156 (Electron 45) refuses without it. It adds no reach: `script-src`
+ * pins each page to its own origin, `connect-src 'none'` and the scheme's
+ * disabled fetch leave nothing to read a response with, and credentials are
+ * never allowed.
+ */
 export function artifactPageHeaders(contentType: string, pageId: string | null): Headers {
   return new Headers({
     'Content-Type': contentType,
@@ -78,6 +87,7 @@ export function artifactPageHeaders(contentType: string, pageId: string | null):
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': 'null',
   });
 }
 

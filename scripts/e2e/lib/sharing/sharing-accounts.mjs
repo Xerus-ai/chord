@@ -34,12 +34,24 @@ export async function fetchSignedOut(path) {
 }
 
 /**
+ * The app a suite launches: `built` (out/, the default) or `packaged` (the installer's unpacked
+ * app), from CHORD_E2E_SOURCE. Any other value is refused, so a typo never runs the wrong app.
+ */
+function e2eSource() {
+  const source = process.env.CHORD_E2E_SOURCE ?? 'built';
+  if (source !== 'built' && source !== 'packaged') {
+    throw new Error(`CHORD_E2E_SOURCE must be 'built' or 'packaged', got '${source}'`);
+  }
+  return source;
+}
+
+/**
  * @param {{ seedProfile: string, label: string }} options
  */
 /** `env` is layered over the app's own (e.g. an agent's home folder for one run). */
 export async function launchAccount({ seedProfile, label, reopenProfile, env = {} }) {
   const instance = await launchSeededApp({
-    source: 'built',
+    source: e2eSource(),
     seedProfile,
     profilePrefix: `chord-p6-${label}`,
     reopenProfile,
