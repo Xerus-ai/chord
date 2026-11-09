@@ -92,6 +92,17 @@ jobs:
       - name: The verdict
         id: verdict
         run: node base/scripts/verifier-verdict.mjs "$RUNNER_TEMP/review.txt" >> "$GITHUB_OUTPUT"
+      # The review kept (devstation-4x42.292): the verdict script wrote the findings to the job
+      # summary and the verdict, findings included, to this file; the ship path reads it with
+      # `gh run download <run-id> -n verifier-verdict`. Uploaded whatever the review did.
+      - name: Keep the verdict and its findings
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verifier-verdict
+          path: ${{ runner.temp }}/verifier-verdict.json
+          if-no-files-found: warn
+          retention-days: 30
 
   post:
     name: verifier post
