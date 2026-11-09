@@ -66,4 +66,21 @@ describe('the verifier workflow (devstation-4x42.265)', () => {
     expect(post).toContain('context=verifier');
     expect(post).toContain('HEAD: ${{ github.event.pull_request.head.sha }}');
   });
+
+  it('uploads the verdict JSON as the artifact verifier-verdict, the verdict step unchanged (4x42.292)', () => {
+    // A permit never changes a run: step of a pull_request_target workflow, so the script writes
+    // the job summary and the JSON itself and the workflow only uploads it.
+    expect(step('The verdict')).toContain(
+      'run: node base/scripts/verifier-verdict.mjs "$RUNNER_TEMP/review.txt" >> "$GITHUB_OUTPUT"'
+    );
+    const upload = step('Keep the verdict and its findings');
+    expect(upload).toMatch(/uses: actions\/upload-artifact@[0-9a-f]{40} /);
+    expect(upload).toContain('if: always()');
+    expect(upload).toContain('name: verifier-verdict');
+    expect(upload).toContain('path: ${{ runner.temp }}/verifier-verdict.json');
+    expect(upload).not.toContain('run:');
+    const at = text.indexOf('- name: Keep the verdict and its findings');
+    expect(text.indexOf('- name: The verdict')).toBeLessThan(at);
+    expect(at).toBeLessThan(text.indexOf('  post:'));
+  });
 });
