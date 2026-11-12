@@ -19,7 +19,7 @@ export interface SegmentedOption<T extends string> {
  * radius. Segments run one padding step tighter than a button because the gap
  * between segments already reads as padding.
  *
- * The selected segment is a `background-2` fill with `foreground` text, never
+ * The selected segment is a `surface-inset` fill with `text` text, never
  * an inverted one — inverting inside thin chrome puts a bright slab in the
  * toolbar. Labels are normal weight: medium is the structural-label tier.
  *
