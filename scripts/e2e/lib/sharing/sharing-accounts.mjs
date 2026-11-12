@@ -7,6 +7,7 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
+import { e2eSource } from '../e2e-source.mjs';
 import { launchSeededApp } from '../seeded-app.mjs';
 
 const API_URL = requireEnv('VITE_CLOUD_API_URL');
@@ -31,18 +32,6 @@ export async function assertServerHealthy() {
 export async function fetchSignedOut(path) {
   const res = await fetch(apiUrl(path));
   return { status: res.status, headers: res.headers, text: await res.text() };
-}
-
-/**
- * The app a suite launches: `built` (out/, the default) or `packaged` (the installer's unpacked
- * app), from CHORD_E2E_SOURCE. Any other value is refused, so a typo never runs the wrong app.
- */
-function e2eSource() {
-  const source = process.env.CHORD_E2E_SOURCE ?? 'built';
-  if (source !== 'built' && source !== 'packaged') {
-    throw new Error(`CHORD_E2E_SOURCE must be 'built' or 'packaged', got '${source}'`);
-  }
-  return source;
 }
 
 /**
