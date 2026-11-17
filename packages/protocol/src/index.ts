@@ -15,6 +15,7 @@ export * from './permission-requests.js';
 export * from './plan-requests.js';
 export * from './sessions.js';
 export * from './shared-items.js';
+export * from './version.js';
 export * from './worktrees.js';
 export * from './ws-client-events.js';
 export * from './ws-events.js';

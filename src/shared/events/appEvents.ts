@@ -1,5 +1,6 @@
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import { defineEvent } from '@shared/ipc/events';
+import type { DesktopCompatibility } from '@main/core/app/desktop-compatibility';
 
 // App editing actions (renderer → main, no payload)
 export const appUndoChannel = defineEvent<void>('app:undo');
@@ -62,4 +63,9 @@ export const shellSessionStartedChannel = defineEvent<{
 /** Emitted after each dependency probe completes (path resolution or version check). */
 export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdatedEvent>(
   'dependency:status-updated'
+);
+
+/** The sync server's verdict on this app's version changed (devstation-mg6u.2). */
+export const desktopCompatibilityChangedChannel = defineEvent<DesktopCompatibility>(
+  'app:desktop-compatibility'
 );
