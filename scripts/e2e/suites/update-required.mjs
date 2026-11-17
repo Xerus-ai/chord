@@ -4,19 +4,25 @@
  * the app's version with the server's min_desktop_version.
  *   - a server whose minimum is above the app's version: the app shows the
  *     "Update required" screen naming both versions, and not the workspace;
- *   - a server whose minimum is the app's own version: the app opens normally.
+ *   - a server whose minimum is below the app's version: the app goes on to its
+ *     normal first screen (sign-in, on a fresh profile).
  * Each launch points CHORD_CLOUD_API_URL at a local server answering /health as
  * the sync server does (other paths 404), so the minimum can be set per launch.
+ * The handshake comes before the session gates, so each launch is a fresh,
+ * signed-out profile: no seed account is needed, and none is spent.
  *
  *   CHORD_E2E_APP_DIR=.e2e-app node scripts/e2e/suites/update-required.mjs
  *
  * Screenshots: <e2e out>/screenshots/update-required-NN-*.png.
  */
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { join } from 'node:path';
-import { E2E_SHOTS_DIR } from '../lib/experience/run-record.mjs';
-import { launchSeededApp } from '../lib/seeded-app.mjs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { _electron as electron } from 'playwright';
+import { E2E_SHOTS_DIR, E2E_VIDEO_DIR, recordRunOnExit } from '../lib/experience/run-record.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const SHOTS = E2E_SHOTS_DIR;
 mkdirSync(SHOTS, { recursive: true });
@@ -50,18 +56,37 @@ async function healthServer(minimum) {
 
 async function withApp(minimum, profilePrefix, check) {
   const health = await healthServer(minimum);
-  const instance = await launchSeededApp({
-    source: 'built',
-    profilePrefix,
-    env: { CHORD_CLOUD_API_URL: health.url },
+  const appData = process.env.APPDATA;
+  if (!appData) throw new Error('APPDATA is not set');
+  const profile = `${profilePrefix}-${Date.now()}`;
+  recordRunOnExit();
+  const app = await electron.launch({
+    executablePath: join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe'),
+    args: [resolve(process.env.CHORD_E2E_APP_DIR ?? ROOT), '--no-sandbox'],
+    cwd: ROOT,
+    timeout: 90_000,
+    ...(process.env.CHORD_E2E_VIDEO
+      ? { recordVideo: { dir: E2E_VIDEO_DIR, size: { width: 1280, height: 800 } } }
+      : {}),
+    env: {
+      ...process.env,
+      CHORD_PROFILE: profile,
+      CHORD_DISABLE_PTY: '1',
+      CHORD_CLOUD_API_URL: health.url,
+    },
   });
+  const page = await app.firstWindow({ timeout: 90_000 });
   try {
-    await check(instance);
+    await page.waitForFunction(() => !!window.electronAPI, null, { timeout: 60_000 });
+    const rpc = (channel, ...args) =>
+      page.evaluate(([c, a]) => window.electronAPI.invoke(c, ...a), [channel, args]);
+    await check({ page, rpc });
   } catch (error) {
-    await instance.page.screenshot({ path: shot('failure') });
+    await page.screenshot({ path: shot('failure') });
     throw error;
   } finally {
-    await instance.close();
+    await app.close();
+    rmSync(join(appData, profile), { recursive: true, force: true });
     await health.close();
   }
 }
@@ -84,8 +109,9 @@ async function main() {
       JSON.stringify(state ?? null)
     );
     verdict(
-      'the workspace is not shown',
-      (await page.getByTitle('Settings', { exact: true }).count()) === 0,
+      'neither sign-in nor the workspace is shown',
+      (await page.getByRole('button', { name: 'Sign in' }).count()) === 0 &&
+        (await page.getByTitle('Settings', { exact: true }).count()) === 0,
       ''
     );
     verdict(
@@ -98,7 +124,7 @@ async function main() {
   });
 
   await withApp('0.0.1', 'chord-update-supported', async ({ page, rpc }) => {
-    await page.getByTitle('Settings', { exact: true }).waitFor({ timeout: 60_000 });
+    await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
     await page.waitForTimeout(400);
     await page.screenshot({ path: shot('supported') });
     const state = await rpc('app.getDesktopCompatibility');
