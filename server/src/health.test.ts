@@ -10,6 +10,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
  * stops advertising the minimum (or advertises one of its own), so old
  * desktops are never told to update.
  */
+// No database for this app: nothing it builds may reach the shared dev/prod one.
+vi.stubEnv('DATABASE_URL', '');
+vi.stubEnv('DEV_MODE', '');
 vi.stubEnv('WORKOS_CLIENT_ID', 'client_health_test');
 const { createApp } = await import('./server');
 const { ConnectionManager } = await import('./ws/connection-manager');

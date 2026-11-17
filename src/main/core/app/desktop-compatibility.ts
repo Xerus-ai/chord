@@ -1,17 +1,10 @@
 import { compareVersions, SemverSchema, ServerHealthSchema } from '@chord/protocol';
+import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 
 /**
  * The desktop half of the version handshake (devstation-mg6u.2): read the sync
  * server's /health and compare this app's version with the minimum it names.
- *   supported        at or above the minimum, or the server names none
- *   update_required  below it: the renderer shows the update-required screen
- *   unknown          the server could not be read; never blocks (offline is
- *                    shown elsewhere), and the next check tries again
  */
-export type DesktopCompatibility =
-  | { state: 'supported'; current: string; minimum: string | null }
-  | { state: 'update_required'; current: string; minimum: string }
-  | { state: 'unknown'; reason: string };
 
 const TIMEOUT_MS = 10_000;
 
@@ -46,7 +39,11 @@ export async function readDesktopCompatibility(
   return { state: 'supported', current, minimum };
 }
 
-/** Holds the last reading and reports each change of state. */
+/**
+ * Holds the verdict and reports each change. A reading that fails (unknown)
+ * never replaces a verdict the server already gave: an app told to update stays
+ * told until the server says otherwise, and going offline does not let it in.
+ */
 export class DesktopCompatibilityMonitor {
   private state: DesktopCompatibility = { state: 'unknown', reason: 'not checked yet' };
 
@@ -62,14 +59,26 @@ export class DesktopCompatibilityMonitor {
     return this.state;
   }
 
+  /** Reads the server once; returns that reading, which may differ from the state kept. */
   async check(): Promise<DesktopCompatibility> {
-    const next = await readDesktopCompatibility(
-      this.options.baseUrl,
-      await this.options.currentVersion()
-    );
-    const changed = JSON.stringify(next) !== JSON.stringify(this.state);
-    this.state = next;
-    if (changed) this.options.onChange(next);
-    return next;
+    let reading: DesktopCompatibility;
+    try {
+      reading = await readDesktopCompatibility(
+        this.options.baseUrl,
+        await this.options.currentVersion()
+      );
+    } catch (error) {
+      reading = {
+        state: 'unknown',
+        reason: `this app's version could not be read: ${String(error)}`,
+      };
+    }
+    if (reading.state === 'unknown' && this.state.state !== 'unknown') return reading;
+    const changed =
+      reading.state !== this.state.state ||
+      (reading.state !== 'unknown' && JSON.stringify(reading) !== JSON.stringify(this.state));
+    this.state = reading;
+    if (changed) this.options.onChange(reading);
+    return reading;
   }
 }

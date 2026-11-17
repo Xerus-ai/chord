@@ -1,6 +1,6 @@
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
+import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { defineEvent } from '@shared/ipc/events';
-import type { DesktopCompatibility } from '@main/core/app/desktop-compatibility';
 
 // App editing actions (renderer → main, no payload)
 export const appUndoChannel = defineEvent<void>('app:undo');

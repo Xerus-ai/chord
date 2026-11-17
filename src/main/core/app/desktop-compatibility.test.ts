@@ -2,11 +2,8 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { compareVersions } from '@chord/protocol';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  DesktopCompatibilityMonitor,
-  readDesktopCompatibility,
-  type DesktopCompatibility,
-} from './desktop-compatibility';
+import type { DesktopCompatibility } from '@shared/desktop-compatibility';
+import { DesktopCompatibilityMonitor, readDesktopCompatibility } from './desktop-compatibility';
 
 /**
  * The version handshake (devstation-mg6u.2), read from a real local HTTP server
@@ -97,7 +94,7 @@ describe('version handshake', () => {
     expect(states[1]).toMatchObject({ reason: expect.stringContaining('503') });
   });
 
-  it('the service emits a change and holds the state', async () => {
+  it('the monitor reports each change once and holds the state', async () => {
     const changes: DesktopCompatibility[] = [];
     const monitor = new DesktopCompatibilityMonitor({
       baseUrl: base,
@@ -116,6 +113,38 @@ describe('version handshake', () => {
       state: 'update_required',
       current: '1.0.0',
       minimum: '2.0.0',
+    });
+  });
+
+  // Review round 1 (devstation-mg6u.2): a failed re-check must not let an app the
+  // server already turned away back in; only a supported reading clears it.
+  it('a verdict survives a failed re-check', async () => {
+    const changes: DesktopCompatibility[] = [];
+    const monitor = new DesktopCompatibilityMonitor({
+      baseUrl: base,
+      currentVersion: async () => '1.0.0',
+      onChange: (s) => changes.push(s),
+    });
+    body = { status: 'ok', min_desktop_version: '2.0.0' };
+    await monitor.check();
+    statusCode = 503;
+    expect((await monitor.check()).state).toBe('unknown');
+    expect(monitor.getState().state).toBe('update_required');
+    statusCode = 200;
+    body = { status: 'ok', min_desktop_version: '1.0.0' };
+    await monitor.check();
+    expect(changes.map((c) => c.state)).toEqual(['update_required', 'supported']);
+    // a version that cannot be read is a reading, not a crash
+    const unreadable = new DesktopCompatibilityMonitor({
+      baseUrl: base,
+      currentVersion: async () => {
+        throw new Error('no package.json');
+      },
+      onChange: () => {},
+    });
+    expect(await unreadable.check()).toMatchObject({
+      state: 'unknown',
+      reason: expect.stringContaining('no package.json'),
     });
   });
 });

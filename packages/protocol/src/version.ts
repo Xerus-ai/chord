@@ -7,9 +7,12 @@ import { z } from 'zod';
  */
 
 /**
- * The oldest desktop version this server supports. Raise it in the same change
- * as the server change that breaks older desktops; it reaches them with that
- * server's deploy, through /health.
+ * The oldest desktop version this server supports, sent on /health.
+ * Raise it only once a desktop release that meets it is live on every update
+ * channel (stable and canary): an app below it is blocked until it updates, so
+ * a minimum with nothing to update to locks every user out.
+ * Write a minimum as X.Y.Z-0 when prereleases of X.Y.Z (canaries) carry the
+ * compatible client too: X.Y.Z-canary.N sorts below X.Y.Z but above X.Y.Z-0.
  */
 export const MIN_DESKTOP_VERSION = '0.1.0';
 
@@ -19,15 +22,14 @@ const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$
 export const SemverSchema = z.string().regex(SEMVER, 'not a semver version');
 
 /**
- * The /health body. min_desktop_version is optional: a server deployed before
- * the handshake does not send it, and demands no minimum.
+ * The part of the /health body the handshake reads; other fields are ignored.
+ * min_desktop_version is optional: a server deployed before the handshake does
+ * not send it, and demands no minimum.
  */
-export const ServerHealthSchema = z
-  .object({
-    status: z.literal('ok'),
-    min_desktop_version: SemverSchema.optional(),
-  })
-  .passthrough();
+export const ServerHealthSchema = z.object({
+  status: z.string(),
+  min_desktop_version: SemverSchema.optional(),
+});
 export type ServerHealth = z.infer<typeof ServerHealthSchema>;
 
 function parse(version: string): { core: number[]; pre: string[] } {

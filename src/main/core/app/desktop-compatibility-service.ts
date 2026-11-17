@@ -1,9 +1,10 @@
+import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { desktopCompatibilityChangedChannel } from '@shared/events/appEvents';
 import { CHORD_SYNC_URL } from '@shared/urls';
 import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
-import { DesktopCompatibilityMonitor, type DesktopCompatibility } from './desktop-compatibility';
+import { DesktopCompatibilityMonitor } from './desktop-compatibility';
 import { appService } from './service';
 
 /** How often a running app asks the sync server again (devstation-mg6u.2). */
@@ -20,8 +21,6 @@ class DesktopCompatibilityService implements IInitializable, IDisposable {
     onChange: (state) => {
       if (state.state === 'update_required') {
         log.warn(`desktop ${state.current} is below the sync server's minimum ${state.minimum}`);
-      } else if (state.state === 'unknown') {
-        log.info(`desktop compatibility unknown: ${state.reason}`);
       }
       events.emit(desktopCompatibilityChangedChannel, state);
     },
@@ -39,11 +38,8 @@ class DesktopCompatibilityService implements IInitializable, IDisposable {
   }
 
   private async check(): Promise<void> {
-    try {
-      await this.monitor.check();
-    } catch (error) {
-      log.error('desktop compatibility check failed:', error);
-    }
+    const reading = await this.monitor.check();
+    if (reading.state === 'unknown') log.info(`desktop compatibility not read: ${reading.reason}`);
   }
 
   dispose(): void {

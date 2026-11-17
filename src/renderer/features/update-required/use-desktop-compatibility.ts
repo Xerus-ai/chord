@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { desktopCompatibilityChangedChannel } from '@shared/events/appEvents';
-import type { DesktopCompatibility } from '@main/core/app/desktop-compatibility';
 import { events, rpc } from '@renderer/lib/ipc';
 
 const KEY = ['app', 'desktop-compatibility'] as const;
