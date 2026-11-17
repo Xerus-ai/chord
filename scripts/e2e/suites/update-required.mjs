@@ -1,3 +1,4 @@
+/* global window -- page.evaluate callbacks run inside the app window */
 /**
  * Live check of the version handshake (devstation-mg6u.2), driven through the
  * real app: the main process reads <CHORD_CLOUD_API_URL>/health and compares
