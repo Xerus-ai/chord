@@ -10,9 +10,11 @@ import { z } from 'zod';
  * The oldest desktop version this server supports, sent on /health.
  * Raise it only once a desktop release that meets it is live on every update
  * channel (stable and canary): an app below it is blocked until it updates, so
- * a minimum with nothing to update to locks every user out.
- * Write a minimum as X.Y.Z-0 when prereleases of X.Y.Z (canaries) carry the
- * compatible client too: X.Y.Z-canary.N sorts below X.Y.Z but above X.Y.Z-0.
+ * a minimum with nothing to update to locks every user out. The order, and the
+ * probe that proves the release is live: server/DEPLOYMENT.md section 7.
+ * When canaries of X.Y.Z carry the compatible client, write the first such
+ * canary (X.Y.Z-canary.K): X.Y.Z-canary.N sorts below X.Y.Z, and X.Y.Z-0 would
+ * also admit canaries cut before the change.
  */
 export const MIN_DESKTOP_VERSION = '0.1.0';
 

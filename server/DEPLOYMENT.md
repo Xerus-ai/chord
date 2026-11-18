@@ -317,8 +317,42 @@ If you ever rebuild the Electron client with a change to git-state pushes
 server before that client build reaches any user.** An old server doesn't
 error on the new field — it silently ignores `content_hash` and applies its
 old full-replace logic, which can drop content the new client assumed was
-already stored. This is the one hard ordering constraint in this codebase;
-everything else degrades gracefully in either direction.
+already stored. Raising the minimum desktop version (below) is the one other
+ordering constraint, in the opposite direction; everything else degrades
+gracefully in either direction.
+
+### Raising the minimum desktop version: client before server
+
+`MIN_DESKTOP_VERSION` (`packages/protocol/src/version.ts`) is what `/health`
+advertises, and an app below it shows only the update screen until it updates.
+Raise it in a server deploy **only after** a desktop release that meets it is
+published and reachable on every channel, or users are told to update to
+something that does not exist yet:
+
+1. Publish a release that meets the new minimum on **both** channels. Each
+   channel's apps read only their own manifests (`v1-stable*`, `v1-canary*`),
+   so a stable release leaves every older canary install with nothing to
+   update to. The upload puts installers on R2 first, then the manifests.
+2. Probe both tags, the stable `vX.Y.Z` and the canary that meets the minimum:
+   `node scripts/release/probe.ts --tag <tag> --out <receipt>` must pass. It
+   checks that each platform's manifest (Windows, mac, linux) names exactly
+   that tag's version and that every file it names answers 200 with a matching
+   sha512. Probe the releases that are current when you raise the minimum: once
+   a newer release replaces a manifest, an older tag's probe fails.
+3. Check that the download page the update screen links to
+   (`CHORD_RELEASES_URL`) serves that release: the probe covers only R2.
+4. Only then merge the change that raises `MIN_DESKTOP_VERSION` and deploy that
+   server release.
+
+Set the minimum to the first compatible build. When canaries of X.Y.Z carry
+the compatible client, write `X.Y.Z-canary.K` for the first such canary
+(`X.Y.Z-canary.N` sorts below `X.Y.Z`); `X.Y.Z-0` would also admit canaries cut
+before the change.
+
+Lowering it, or rolling the server back to a lower minimum, locks no one out:
+an app it blocked passes on its next version check (every 30 minutes) or on
+restart. It is data-safe only if the running server still accepts those older
+clients; a minimum is usually raised because it no longer does.
 
 ## 8. Upgrades & restarts
 
