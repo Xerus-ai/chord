@@ -1,0 +1,3 @@
+# The deploy user's one root command (devstation-5s42): restart the sync server
+# after deploy.sh flips the release. Installed by bootstrap.sh, checked with visudo.
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart chord-sync.service

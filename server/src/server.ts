@@ -17,7 +17,7 @@ import { mountResourceRoutes } from './routes/mount-resource-routes.js';
 import { registerSyncProfileRoute } from './routes/sync-profile.js';
 import { teamPulseRouter } from './routes/team-pulse.js';
 import { mountPublicWebRoutes } from './web/mount-public-web-routes.js';
-import { ConnectionManager } from './ws/connection-manager.js';
+import { ConnectionManager, SERVER_EPOCH } from './ws/connection-manager.js';
 import { createWebSocketServer } from './ws/create-websocket-server.js';
 
 // The Electron app is the only real client: packaged builds load the
@@ -108,7 +108,12 @@ export function createApp(connectionManager: ConnectionManager) {
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.1.0',
+      // The release this process runs (devstation-5s42): deploy.sh writes the tag
+      // and commit to the unit's release.env and asserts version == tag. Outside a
+      // deploy there is no release, so null rather than a made-up version.
+      version: process.env.CHORD_RELEASE_TAG || null,
+      commit: process.env.CHORD_RELEASE_COMMIT || null,
+      epoch: SERVER_EPOCH,
       // The version handshake (devstation-mg6u.2): desktops below this are told to update.
       min_desktop_version: MIN_DESKTOP_VERSION,
     });
