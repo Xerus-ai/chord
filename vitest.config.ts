@@ -61,6 +61,8 @@ const laneRunSuites = ['src/main/core/lane-runs/**/*.test.ts'];
 // while all 9 files passed together on their own in 157s. They run as their
 // own group after the others, still in parallel with each other.
 const soloSuites = ['src/main/core/solo/**/*.test.ts'];
+// deploy.sh against a real database (devstation-mg6u.10): its own project, not the default run.
+const deployDbSuites = ['scripts/release/deploy-migrate.test.ts'];
 
 export default defineConfig({
   resolve: { alias },
@@ -79,6 +81,17 @@ export default defineConfig({
     // by name (devstation-ce5).
     reporters: ['default', './scripts/vitest/unfinished-files-reporter.ts'],
     projects: [
+      {
+        // deploy.sh's migrate step against a real, disposable database
+        // (devstation-mg6u.10): needs CHORD_DEPLOY_TEST_DATABASE_URL, so it runs
+        // only through `pnpm run test:deploy-db`, never in the default suite.
+        extends: true,
+        test: {
+          name: 'deploy-db',
+          environment: 'node',
+          include: deployDbSuites,
+        },
+      },
       {
         // All existing tests that run in a Node.js environment.
         extends: true,
@@ -100,6 +113,7 @@ export default defineConfig({
             ...realCodexSuites,
             ...laneRunSuites,
             ...soloSuites,
+            ...deployDbSuites,
           ],
           // Ten suites here drive a real `git` against real repositories on
           // disk. Spawning processes on Windows is slow enough that under the

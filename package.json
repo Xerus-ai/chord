@@ -20,6 +20,7 @@
     "codex:protocol": "node scripts/generate-codex-protocol.mjs",
     "db:reset": "rm -f \"$HOME/Library/Application Support/chord/chord.db\" \"$HOME/Library/Application Support/chord/chord.db-wal\" \"$HOME/Library/Application Support/chord/chord.db-shm\" \"$HOME/.config/chord/chord.db\" \"$HOME/.config/chord/chord.db-wal\" \"$HOME/.config/chord/chord.db-shm\"",
     "test": "pnpm run build:protocol && vitest run --project node --project node-lane-runs --project node-solo --project server --project browser",
+    "test:deploy-db": "vitest run --project deploy-db",
     "test:codex": "pnpm run build:protocol && vitest run --project node-codex",
     "build": "pnpm run build:protocol && electron-vite build",
     "build:main": "electron-vite build --filter main",
