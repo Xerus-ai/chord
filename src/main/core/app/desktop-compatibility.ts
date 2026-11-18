@@ -150,11 +150,21 @@ export class DesktopCompatibilityMonitor {
   }
 
   private async checkAndSchedule(): Promise<void> {
+    const first = this.state.state === 'unknown' && !this.state.checked;
     const reading = await this.check();
     if (reading.state === 'unknown') log.info(`desktop compatibility not read: ${reading.reason}`);
     if (!this.running) return;
     const { regular, paused } = this.options.intervals;
-    const wait = this.state.state === 'supported' ? regular : paused;
+    // A first reading that failed may only have hit its short timeout (a cold
+    // boot keeps the event loop busy for seconds): asked again at once, with
+    // the full timeout, so an app below the minimum is turned away seconds
+    // after the window opens rather than one paused interval later.
+    const wait =
+      first && reading.state === 'unknown'
+        ? 0
+        : this.state.state === 'supported'
+          ? regular
+          : paused;
     this.timer = setTimeout(() => void this.checkAndSchedule(), wait);
     this.timer.unref?.();
   }

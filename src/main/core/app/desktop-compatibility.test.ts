@@ -31,6 +31,8 @@ function monitorOf(
   });
 }
 let body: unknown = { status: 'ok' };
+/** Delays of the next /health answers, one per request, in ms. */
+let delays: number[] = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -45,9 +47,14 @@ beforeAll(async () => {
       res.end();
       return;
     }
-    res.statusCode = statusCode;
-    res.setHeader('content-type', 'application/json');
-    res.end(typeof body === 'string' ? body : JSON.stringify(body));
+    const answer = () => {
+      res.statusCode = statusCode;
+      res.setHeader('content-type', 'application/json');
+      res.end(typeof body === 'string' ? body : JSON.stringify(body));
+    };
+    const delay = delays.shift() ?? 0;
+    if (delay > 0) setTimeout(answer, delay);
+    else answer();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -58,6 +65,7 @@ afterAll(async () => {
 beforeEach(() => {
   statusCode = 200;
   body = { status: 'ok' };
+  delays = [];
 });
 
 describe('version handshake', () => {
@@ -268,6 +276,30 @@ describe('version handshake', () => {
       monitor.stop();
     }
   });
+
+  // A cold boot can keep the first reading past its short timeout although the
+  // server answers: the app is let through, then turned away seconds later by
+  // an immediate second reading with the full timeout, not minutes later.
+  it('a first reading that timed out is asked again at once with the full timeout', async () => {
+    const monitor = monitorOf(
+      async () => '1.0.0',
+      () => {},
+      { regular: 60_000, paused: 60_000 }
+    );
+    body = { status: 'ok', min_desktop_version: '2.0.0' };
+    delays = [3_500, 3_500];
+    const started = Date.now();
+    monitor.start();
+    try {
+      await vi.waitFor(() => expect(monitor.getState().state).toBe('update_required'), {
+        timeout: 12_000,
+        interval: 50,
+      });
+      expect(Date.now() - started).toBeLessThan(10_000);
+    } finally {
+      monitor.stop();
+    }
+  }, 15_000);
 
   // A first reading that failed (a slow boot or network) let the app through
   // unjudged: it is asked again on the short interval too.
