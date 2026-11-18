@@ -30,6 +30,9 @@ import {
  *                                 adopt a database that was migrated by hand:
  *                                 record 0000..0010 as applied WITHOUT running
  *                                 them
+ *
+ * A write (apply or --baseline) runs only with CHORD_RELEASE_TAG set, which
+ * deploy.sh does, or with --unreleased on a disposable or local database.
  */
 
 neonConfig.webSocketConstructor = ws;
@@ -188,7 +191,25 @@ function parseBaselineArg(value: string | undefined): number {
   return version;
 }
 
+/**
+ * Dev and prod share one database, so a write from a feature branch would put
+ * its unreleased migration files in production, past the release's migration
+ * lint, and every later deploy would then refuse the database. A write (apply or
+ * --baseline) needs the release tag deploy.sh passes, or an explicit
+ * --unreleased for a database that is not the shared one. --status writes
+ * nothing and is always allowed.
+ */
+function assertMayWrite(argv: string[], releaseTag: string | undefined): void {
+  if (argv.includes('--status') || argv.includes('--unreleased') || releaseTag) return;
+  throw new Error(
+    '[migrate] refusing to write: dev and prod share one database, and only a release deploy (deploy.sh sets CHORD_RELEASE_TAG) applies migrations to it. Use --status to read, or pass --unreleased if DATABASE_URL is a disposable or local database.'
+  );
+}
+
 async function main(argv: string[]): Promise<void> {
+  const releaseTag = process.env.CHORD_RELEASE_TAG;
+  assertMayWrite(argv, releaseTag);
+
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('[migrate] DATABASE_URL is not set');
@@ -200,6 +221,7 @@ async function main(argv: string[]): Promise<void> {
     statusOnly: argv.includes('--status'),
     ...(baselineIndex === -1 ? {} : { baselineThrough: parseBaselineArg(argv[baselineIndex + 1]) }),
   };
+  if (!options.statusOnly && releaseTag) console.log(`[migrate] release ${releaseTag}`);
 
   const result = await runMigrations(options);
 

@@ -165,7 +165,9 @@ migrate_release() {
   # --status stops before any change when the database is ahead of this
   # release, a shipped migration was edited, or one is out of order.
   before=$(pending_count "$url") || return 1
-  DATABASE_URL=$url timeout 900 pnpm -s run migrate && return 0
+  # The tag is what lets migrate write: dev and prod share the database, and
+  # only a release deploy applies migrations to it.
+  DATABASE_URL=$url CHORD_RELEASE_TAG=$tag timeout 900 pnpm -s run migrate && return 0
   # Each file commits on its own: a failure after the first leaves some applied.
   # A status that fails too (the database is likely down) cannot say nothing
   # was applied: count it as applied, so the log errs towards schema_ahead.
