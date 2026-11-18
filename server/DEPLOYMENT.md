@@ -108,9 +108,19 @@ path reads it.**
 Apply them with the runner, from `server/`:
 
 ```bash
-pnpm run migrate             # apply every file this database is missing
 pnpm run migrate --status    # report applied/pending, write nothing
+CHORD_RELEASE_TAG=<tag> pnpm run migrate   # what deploy.sh runs: apply every file this database is missing
+pnpm run migrate --unreleased              # the same, on a disposable or local database only
 ```
+
+**A write needs a release.** Dev and prod share one database, so a plain
+`pnpm run migrate` refuses to apply (or `--baseline`) unless `CHORD_RELEASE_TAG`
+is set, which deploy.sh does with the tag it deploys, or `--unreleased` is
+passed. Without the guard a feature branch's unreleased file would reach
+production past the release's migration lint, and every later deploy would
+refuse the database (ahead of the code, or a checksum mismatch once the file
+changes before it ships). Never pass `--unreleased` against the shared
+database.
 
 `src/db/migrate.ts` reads the directory in numeric order, applies each
 pending file **in its own transaction**, and records it in a `_migrations`
@@ -158,11 +168,14 @@ empty) and **stops**, because blindly re-applying 0000 onward to it would
 fail on the first unguarded statement — and 0003 carries a data migration
 that renumbers artifact versions.
 
-Tell it what that database already received, once:
+Tell it what that database already received, once. This is a one-time
+operator step on the shared database, so it carries the tag of the release
+being deployed, exactly as deploy.sh would; on any other database use
+`--unreleased` instead of the tag:
 
 ```bash
-pnpm run migrate --baseline 0010   # record 0000..0010 as applied, run none of them
-pnpm run migrate                   # then apply anything newer, normally
+CHORD_RELEASE_TAG=<tag> pnpm run migrate --baseline 0010   # record 0000..0010 as applied, run none of them
+CHORD_RELEASE_TAG=<tag> pnpm run migrate                   # then apply anything newer, normally
 ```
 
 `--baseline` only writes ledger rows; it executes no SQL from the migrations.
@@ -316,10 +329,10 @@ reconnecting client tell "the server restarted" apart from "I have a real
 gap in this connection's event stream," and both cases already trigger a
 resync). No manual client action needed after a restart.
 
-For future schema changes: run `pnpm run migrate` (step 4) **before**
-deploying the code that depends on it, never the other way around. It is a
-no-op when the database is already current, so running it on every deploy is
-the safe habit.
+For future schema changes: the migrations ship in a release, and deploy.sh
+applies them (step 4, with the release's `CHORD_RELEASE_TAG`) **before** it
+switches to the code that depends on them, never the other way around. It is a
+no-op when the database is already current.
 
 ## 9. Verify it works
 

@@ -1,7 +1,7 @@
-import 'dotenv/config';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Client, neonConfig } from '@neondatabase/serverless';
+import { config as loadDotenv } from 'dotenv';
 import ws from 'ws';
 import {
   loadMigrations,
@@ -24,12 +24,18 @@ import {
  * fails halfway leaves its earlier statements committed. Migrations need a real
  * session with BEGIN/COMMIT, which is what this driver gives.
  *
- *   pnpm run migrate              apply everything pending
  *   pnpm run migrate --status     report applied/pending, touch nothing
- *   pnpm run migrate --baseline 0010
+ *   CHORD_RELEASE_TAG=<tag> pnpm run migrate
+ *                                 apply everything pending (deploy.sh runs this)
+ *   pnpm run migrate --unreleased the same, on a disposable or local database
+ *   CHORD_RELEASE_TAG=<tag> pnpm run migrate --baseline 0010
  *                                 adopt a database that was migrated by hand:
  *                                 record 0000..0010 as applied WITHOUT running
  *                                 them
+ *
+ * A write (apply or --baseline) is refused without one of those two: dev and
+ * prod share one database. The tag is read from the process environment only,
+ * never from .env.
  */
 
 neonConfig.webSocketConstructor = ws;
@@ -188,7 +194,28 @@ function parseBaselineArg(value: string | undefined): number {
   return version;
 }
 
+/**
+ * Dev and prod share one database, so a write from a feature branch would put
+ * its unreleased migration files in production, past the release's migration
+ * lint, and every later deploy would then refuse the database. A write (apply or
+ * --baseline) needs the release tag deploy.sh passes, or an explicit
+ * --unreleased for a database that is not the shared one. --status writes
+ * nothing and is always allowed.
+ */
+function assertMayWrite(argv: string[], releaseTag: string): void {
+  if (argv.includes('--status') || argv.includes('--unreleased') || releaseTag !== '') return;
+  throw new Error(
+    '[migrate] refusing to write: dev and prod share one database, and only a release deploy (deploy.sh sets CHORD_RELEASE_TAG) applies migrations to it. Use --status to read, or pass --unreleased if DATABASE_URL is a disposable or local database.'
+  );
+}
+
 async function main(argv: string[]): Promise<void> {
+  // Read before .env is loaded: the tag must come from the deploy that runs
+  // this, never from a .env line that would switch the guard off for good.
+  const releaseTag = (process.env.CHORD_RELEASE_TAG ?? '').trim();
+  assertMayWrite(argv, releaseTag);
+  loadDotenv();
+
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('[migrate] DATABASE_URL is not set');
@@ -200,6 +227,7 @@ async function main(argv: string[]): Promise<void> {
     statusOnly: argv.includes('--status'),
     ...(baselineIndex === -1 ? {} : { baselineThrough: parseBaselineArg(argv[baselineIndex + 1]) }),
   };
+  if (!options.statusOnly && releaseTag) console.log(`[migrate] release ${releaseTag}`);
 
   const result = await runMigrations(options);
 
