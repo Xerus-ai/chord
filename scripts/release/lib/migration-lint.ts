@@ -48,6 +48,9 @@ export function contractFor(sql: string): string | null {
   return null;
 }
 
+/** A literal that EXECUTE (or EXECUTE format(...)) runs: its text is SQL that still runs. */
+const EXECUTED_LITERAL = /\bEXECUTE\s*(?:format\s*\(\s*)?$/i;
+
 /**
  * The SQL with comments, string literals and quoted identifiers blanked, so a
  * DROP TABLE inside a comment or a literal is not a statement and a `;` inside
@@ -55,8 +58,6 @@ export function contractFor(sql: string): string | null {
  * kept as SQL: DDL inside them still runs, and destructiveStatement finds it
  * anywhere in a statement, not only at its start.
  */
-/** A literal that EXECUTE (or EXECUTE format(...)) runs: its text is SQL that still runs. */
-const EXECUTED_LITERAL = /\bEXECUTE\s*(?:format\s*\(\s*)?$/i;
 
 function stripCommentsAndStrings(sql: string): string {
   let out = '';
@@ -206,6 +207,8 @@ function dynamicExecutes(sql: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(/\bEXECUTE\b/gi)) {
     const rest = text.slice((m.index ?? 0) + m[0].length);
+    // A trigger's EXECUTE FUNCTION/PROCEDURE names a function: not dynamic SQL.
+    if (/^\s*(?:FUNCTION|PROCEDURE)\b/i.test(rest)) continue;
     if (!plain.test(rest)) out.push(`EXECUTE${rest.slice(0, 80)}`.replace(/\s+/g, ' ').trim());
   }
   return out;
