@@ -80,8 +80,9 @@ export async function processSyncRow(
       return { proceed: true, delivered: false };
     }
 
-    // Transient network/timeout failure: revert without consuming a retry and
-    // stop the cycle so the whole batch is retried once connectivity returns.
+    // Transient network/timeout failure, or the version gate closed between the
+    // claim and the send (cloudFetch refuses before any request): revert without
+    // consuming a retry and stop the cycle so the batch is retried later.
     db.update(syncQueue).set({ status: 'pending' }).where(eq(syncQueue.id, row.id)).run();
     log.warn('[sync-queue] transient send failure, deferring batch', {
       id: row.id,

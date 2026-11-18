@@ -5,7 +5,7 @@ import { compareVersions, MIN_DESKTOP_VERSION, ServerHealthSchema } from '@chord
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
- * The server half of the version handshake (devstation-mg6u.2): the real app
+ * The server half of the version handshake: the real app
  * from createApp, on a real port, answers /health without a token and names
  * the protocol's minimum desktop version. The bug this catches: a server that
  * stops advertising the minimum (or advertises one of its own), so old
@@ -38,7 +38,7 @@ describe('/health', () => {
     expect(health.min_desktop_version).toBe(MIN_DESKTOP_VERSION);
   });
 
-  // devstation-mg6u.5, the equality boundary: the minimum ships with the server
+  // The equality boundary: the minimum ships with the server
   // built from this commit, so the desktop built from it must be at or above
   // it, or a release would tell its own installers to update. The bug: a
   // minimum raised past the app's version in the same change.
