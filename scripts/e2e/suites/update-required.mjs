@@ -5,8 +5,14 @@
  * the app's version with the server's min_desktop_version.
  *   - a server whose minimum is above the app's version: the app shows the
  *     "Update required" screen naming both versions, and not the workspace;
- *   - a server whose minimum is below the app's version: the app goes on to its
- *     normal first screen (sign-in, on a fresh profile).
+ *     Check for updates shows the updater working (or its answer), and Download
+ *     from the website opens the releases page and quits (devstation-mg6u.5);
+ *   - a server whose minimum IS the app's version (the equality boundary): the
+ *     app goes on to its normal first screen (sign-in, on a fresh profile);
+ *   - no server at all: the first reading is unknown, which never blocks, so the
+ *     app leaves its placeholder for sign-in (devstation-mg6u.5).
+ * CHORD_RELEASES_URL points at the same local server, so the website action
+ * opens a local page in the default browser and the server sees it.
  * Each launch points CHORD_CLOUD_API_URL at a local server answering /health as
  * the sync server does (other paths 404), so the minimum can be set per launch.
  * The handshake comes before the session gates, so each launch is a fresh,
@@ -16,7 +22,7 @@
  *
  * Screenshots: <e2e out>/screenshots/update-required-NN-*.png.
  */
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +30,9 @@ import { _electron as electron } from 'playwright';
 import { E2E_SHOTS_DIR, E2E_VIDEO_DIR, recordRunOnExit } from '../lib/experience/run-record.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const APP_VERSION = JSON.parse(
+  readFileSync(join(resolve(process.env.CHORD_E2E_APP_DIR ?? ROOT), 'package.json'), 'utf-8')
+).version;
 
 const SHOTS = E2E_SHOTS_DIR;
 mkdirSync(SHOTS, { recursive: true });
@@ -37,9 +46,20 @@ function verdict(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} — ${detail}`);
 }
 
-/** A local /health answering with the given minimum; resolves to { url, close }. */
+/**
+ * A local sync server stand-in: /health with the given minimum, /releases as the
+ * download page. A null minimum is no server at all (a port nobody listens on).
+ * Resolves to { url, hits, close }.
+ */
 async function healthServer(minimum) {
+  const hits = [];
   const server = createServer((req, res) => {
+    hits.push(req.url);
+    if (req.url === '/releases') {
+      res.setHeader('content-type', 'text/html');
+      res.end('<h1>Chord releases (e2e stand-in)</h1>');
+      return;
+    }
     if (req.url !== '/health') {
       res.statusCode = 404;
       res.end();
@@ -49,10 +69,13 @@ async function healthServer(minimum) {
     res.end(JSON.stringify({ status: 'ok', min_desktop_version: minimum }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    close: () => new Promise((resolve) => server.close(resolve)),
-  };
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const close = () => new Promise((resolve) => server.close(resolve));
+  if (minimum === null) {
+    await close();
+    return { url, hits, close: async () => {} };
+  }
+  return { url, hits, close };
 }
 
 async function withApp(minimum, profilePrefix, check) {
@@ -74,26 +97,34 @@ async function withApp(minimum, profilePrefix, check) {
       CHORD_PROFILE: profile,
       CHORD_DISABLE_PTY: '1',
       CHORD_CLOUD_API_URL: health.url,
+      CHORD_RELEASES_URL: `${health.url}/releases`,
     },
   });
+  let closed = false;
+  const quit = new Promise((resolve) =>
+    app.on('close', () => {
+      closed = true;
+      resolve();
+    })
+  );
   const page = await app.firstWindow({ timeout: 90_000 });
   try {
     await page.waitForFunction(() => !!window.electronAPI, null, { timeout: 60_000 });
     const rpc = (channel, ...args) =>
       page.evaluate(([c, a]) => window.electronAPI.invoke(c, ...a), [channel, args]);
-    await check({ page, rpc });
+    await check({ page, rpc, quit, hits: health.hits });
   } catch (error) {
-    await page.screenshot({ path: shot('failure') });
+    if (!closed) await page.screenshot({ path: shot('failure') });
     throw error;
   } finally {
-    await app.close();
+    if (!closed) await app.close();
     rmSync(join(appData, profile), { recursive: true, force: true });
     await health.close();
   }
 }
 
 async function main() {
-  await withApp('99.0.0', 'chord-update-required', async ({ page, rpc }) => {
+  await withApp('99.0.0', 'chord-update-required', async ({ page, rpc, quit, hits }) => {
     await page.getByRole('heading', { name: 'Update required' }).waitFor({ timeout: 60_000 });
     await page.waitForTimeout(400);
     await page.screenshot({ path: shot('blocked') });
@@ -115,25 +146,64 @@ async function main() {
         (await page.getByTitle('Settings', { exact: true }).count()) === 0,
       ''
     );
+    const check = page.getByRole('button', { name: /check for updates/i });
+    verdict('offers Check for updates', (await check.count()) === 1, '');
+    await check.click();
+    // The updater answers with progress, "nothing found", or its error; any of
+    // them is the screen reacting. An unpackaged build has no update feed.
+    const reacted = await page
+      .getByText(/checking…|downloading|no update was found|failed|unavailable|error/i)
+      .first()
+      .waitFor({ timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.screenshot({ path: shot('checked') });
     verdict(
-      'offers the update',
-      (await page
-        .getByRole('button', { name: /download update|check for updates|open the download page/i })
-        .count()) > 0,
-      ''
+      'Check for updates shows the updater working or its answer',
+      reacted,
+      (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 200)
+    );
+    // Last: this one quits the app.
+    await page.getByRole('button', { name: /download from the website/i }).click();
+    const quitInTime = await Promise.race([
+      quit.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 15_000)),
+    ]);
+    verdict(
+      'Download from the website opens the releases page and quits',
+      quitInTime && hits.includes('/releases'),
+      `quit=${quitInTime} releases page requested=${hits.includes('/releases')}`
     );
   });
 
-  await withApp('0.0.1', 'chord-update-supported', async ({ page, rpc }) => {
+  // The equality boundary: the minimum is exactly this app's version.
+  await withApp(APP_VERSION, 'chord-update-supported', async ({ page, rpc }) => {
     await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
     await page.waitForTimeout(400);
     await page.screenshot({ path: shot('supported') });
     const state = await rpc('app.getDesktopCompatibility');
-    verdict('main holds supported', state?.state === 'supported', JSON.stringify(state ?? null));
+    verdict(
+      `main holds supported at the minimum ${APP_VERSION}`,
+      state?.state === 'supported' && state.minimum === APP_VERSION,
+      JSON.stringify(state ?? null)
+    );
     verdict(
       'no update-required screen',
       (await page.getByRole('heading', { name: 'Update required' }).count()) === 0,
       ''
+    );
+  });
+
+  // No server: unknown never blocks, and the placeholder gives way to sign-in.
+  await withApp(null, 'chord-update-server-down', async ({ page, rpc }) => {
+    await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: shot('server-down') });
+    const state = await rpc('app.getDesktopCompatibility');
+    verdict(
+      'server down: main holds a checked unknown and the app reaches sign-in',
+      state?.state === 'unknown' && state.checked === true,
+      JSON.stringify(state ?? null)
     );
   });
 

@@ -20,6 +20,12 @@ let body: unknown = { status: 'ok' };
 
 beforeAll(async () => {
   server = createServer((req, res) => {
+    // A deployment mounted under a path prefix answers there, with its own minimum.
+    if (req.url === '/api/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ status: 'ok', min_desktop_version: '9.0.0' }));
+      return;
+    }
     if (req.url !== '/health') {
       res.statusCode = 404;
       res.end();
@@ -92,6 +98,38 @@ describe('version handshake', () => {
     states.push(await readDesktopCompatibility(base, '0.1.0'));
     for (const s of states) expect(s.state).toBe('unknown');
     expect(states[1]).toMatchObject({ reason: expect.stringContaining('503') });
+    // The parse error itself, not just "not JSON" (mg6u.2 verifier P3).
+    expect(states[2]).toMatchObject({ reason: expect.stringMatching(/Unexpected token|not valid JSON/) });
+  });
+
+  // devstation-mg6u.5: new URL('/health', base) dropped a path prefix in the base.
+  it('a base URL with a path prefix is read under that prefix', async () => {
+    expect(await readDesktopCompatibility(`${base}/api`, '1.0.0')).toEqual({
+      state: 'update_required',
+      current: '1.0.0',
+      minimum: '9.0.0',
+    });
+    expect((await readDesktopCompatibility(`${base}/api/`, '1.0.0')).state).toBe('update_required');
+  });
+
+  // devstation-mg6u.5: the first reading is what lets the renderer leave its
+  // placeholder, so it is reported even when it is unknown; a later unknown is not.
+  it('the first completed reading is reported, even an unknown one', async () => {
+    const changes: DesktopCompatibility[] = [];
+    const monitor = new DesktopCompatibilityMonitor({
+      baseUrl: base,
+      currentVersion: async () => '1.0.0',
+      onChange: (s) => changes.push(s),
+    });
+    expect(monitor.getState()).toMatchObject({ state: 'unknown', checked: false });
+    statusCode = 503;
+    await monitor.check();
+    expect(changes).toEqual([
+      { state: 'unknown', checked: true, reason: expect.stringContaining('503') },
+    ]);
+    await monitor.check();
+    expect(changes).toHaveLength(1);
+    expect(monitor.getState()).toMatchObject({ state: 'unknown', checked: true });
   });
 
   it('the monitor reports each change once and holds the state', async () => {
