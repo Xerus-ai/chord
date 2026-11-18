@@ -233,20 +233,26 @@ describe('deploy.sh', () => {
 
   // devstation-mg6u.9: the deploy user's pnpm store only grew; it is pruned after each live
   // release, and a prune that fails fails the deploy without taking the release down.
-  it('prunes the pnpm store after a live release; a failed prune exits 1 and stays live', { timeout: 120_000 }, async () => {
-    const { root, run } = await box();
-    mkdirSync(join(root, 'shared'), { recursive: true });
-    writeFileSync(join(root, 'shared', '.env'), 'MIGRATE_DATABASE_URL=postgres://unused\n');
-    const ok = run(`deploy v2.0.0 ${SHA}`, releaseTar());
-    expect(ok.code, ok.out).toBe(0);
-    const log = readFileSync(join(root, 'shared', 'deploy.log'), 'utf8');
-    expect(log.indexOf('store-pruned'), log).toBeGreaterThan(log.lastIndexOf('live'));
+  it(
+    'prunes the pnpm store after a live release; a failed prune exits 1 and stays live',
+    { timeout: 120_000 },
+    async () => {
+      const { root, run } = await box();
+      mkdirSync(join(root, 'shared'), { recursive: true });
+      writeFileSync(join(root, 'shared', '.env'), 'MIGRATE_DATABASE_URL=postgres://unused\n');
+      const ok = run(`deploy v2.0.0 ${SHA}`, releaseTar());
+      expect(ok.code, ok.out).toBe(0);
+      const log = readFileSync(join(root, 'shared', 'deploy.log'), 'utf8');
+      expect(log.indexOf('store-pruned'), log).toBeGreaterThan(log.lastIndexOf('live'));
 
-    const failed = run(`deploy v2.1.0 ${SHA}`, releaseTar(), { DEPLOY_STORE_PRUNE: 'exit 9' });
-    expect(failed.code, failed.out).toBe(1);
-    expect(current(root)).toBe('v2.1.0');
-    expect(readFileSync(join(root, 'shared', 'deploy.log'), 'utf8')).toMatch(/store prune failed/);
-  });
+      const failed = run(`deploy v2.1.0 ${SHA}`, releaseTar(), { DEPLOY_STORE_PRUNE: 'exit 9' });
+      expect(failed.code, failed.out).toBe(1);
+      expect(current(root)).toBe('v2.1.0');
+      expect(readFileSync(join(root, 'shared', 'deploy.log'), 'utf8')).toMatch(
+        /store prune failed/
+      );
+    }
+  );
 });
 
 // devstation-mg6u.9: the Caddyfile names no host; bootstrap renders it from CHORD_API_HOST.
@@ -257,7 +263,10 @@ describe('render-caddyfile.sh', () => {
     const out = join(temp('caddy-'), 'Caddyfile');
     const base = { ...process.env };
     delete base.CHORD_API_HOST;
-    const res = spawnSync(BASH, [RENDER, TEMPLATE, out], { encoding: 'utf8', env: { ...base, ...env } });
+    const res = spawnSync(BASH, [RENDER, TEMPLATE, out], {
+      encoding: 'utf8',
+      env: { ...base, ...env },
+    });
     return { code: res.status, out: `${res.stdout}${res.stderr}`, file: out };
   };
 

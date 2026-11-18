@@ -184,14 +184,17 @@ describe('deploy.sh migrate on a real database', () => {
   });
 
   // devstation-mg6u.9: a second runner used to wait on the advisory lock forever.
-  it('migrate refuses within the lock wait while another session holds the lock', { timeout: 300_000 }, async () => {
-    resetDatabase();
-    const holder = spawn(
-      'node',
-      [
-        '--input-type=module',
-        '-e',
-        `import { Client, neonConfig } from '@neondatabase/serverless';
+  it(
+    'migrate refuses within the lock wait while another session holds the lock',
+    { timeout: 300_000 },
+    async () => {
+      resetDatabase();
+      const holder = spawn(
+        'node',
+        [
+          '--input-type=module',
+          '-e',
+          `import { Client, neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
 neonConfig.webSocketConstructor = ws;
 const c = new Client(process.env.U);
@@ -199,37 +202,44 @@ await c.connect();
 const { rows } = await c.query('SELECT pg_advisory_lock(4919170251), pg_backend_pid() AS pid');
 console.log('held ' + rows[0].pid);
 process.stdin.on('data', async () => { await c.end(); process.exit(0); });`,
-      ],
-      { cwd: SERVER, env: { ...process.env, U: DATABASE_URL }, stdio: ['pipe', 'pipe', 'inherit'] }
-    );
-    const holderPid = await new Promise<string>((resolve, reject) => {
-      holder.stdout.on('data', (chunk: Buffer) => {
-        const m = /held (\d+)/.exec(chunk.toString());
-        if (m) resolve(m[1]);
+        ],
+        {
+          cwd: SERVER,
+          env: { ...process.env, U: DATABASE_URL },
+          stdio: ['pipe', 'pipe', 'inherit'],
+        }
+      );
+      const holderPid = await new Promise<string>((resolve, reject) => {
+        holder.stdout.on('data', (chunk: Buffer) => {
+          const m = /held (\d+)/.exec(chunk.toString());
+          if (m) resolve(m[1]);
+        });
+        holder.on('exit', (code) => reject(new Error(`lock holder exited ${code}`)));
       });
-      holder.on('exit', (code) => reject(new Error(`lock holder exited ${code}`)));
-    });
-    const migrate = () =>
-      spawnSync('node', [TSX_CLI, MIGRATE_TS, '--unreleased'], {
-        cwd: temp('migrate-lock-'),
-        encoding: 'utf8',
-        timeout: 120_000,
-        env: { ...process.env, DATABASE_URL, CHORD_MIGRATE_LOCK_WAIT_S: '3' },
-      });
+      const migrate = () =>
+        spawnSync('node', [TSX_CLI, MIGRATE_TS, '--unreleased'], {
+          cwd: temp('migrate-lock-'),
+          encoding: 'utf8',
+          timeout: 120_000,
+          env: { ...process.env, DATABASE_URL, CHORD_MIGRATE_LOCK_WAIT_S: '3' },
+        });
 
-    try {
-      const started = Date.now();
-      const blocked = migrate();
-      expect(blocked.status, blocked.stderr).not.toBe(0);
-      expect(`${blocked.stdout}${blocked.stderr}`).toMatch(new RegExp(`lock.*held by pid ${holderPid}`));
-      expect(Date.now() - started).toBeLessThan(60_000);
-    } finally {
-      // Released even when an assertion above fails, so no later case waits on the lock.
-      holder.stdin.write('release\n');
-      await new Promise((resolve) => holder.on('exit', resolve));
+      try {
+        const started = Date.now();
+        const blocked = migrate();
+        expect(blocked.status, blocked.stderr).not.toBe(0);
+        expect(`${blocked.stdout}${blocked.stderr}`).toMatch(
+          new RegExp(`lock.*held by pid ${holderPid}`)
+        );
+        expect(Date.now() - started).toBeLessThan(60_000);
+      } finally {
+        // Released even when an assertion above fails, so no later case waits on the lock.
+        holder.stdin.write('release\n');
+        await new Promise((resolve) => holder.on('exit', resolve));
+      }
+      const applied = migrate();
+      expect(applied.status, `${applied.stdout}${applied.stderr}`).toBe(0);
+      expect(applied.stdout).toMatch(/\[migrate\] done/);
     }
-    const applied = migrate();
-    expect(applied.status, `${applied.stdout}${applied.stderr}`).toBe(0);
-    expect(applied.stdout).toMatch(/\[migrate\] done/);
-  });
+  );
 });
