@@ -68,7 +68,7 @@ const PRESENCE_REFRESH_INTERVAL_MS = 120_000;
 // difference between "the server restarted, my cursor is meaningless" and "I
 // have a real gap within this incarnation's sequence." Mirrors the local
 // turn-stream's per-session epoch (src/shared/session-stream-reducers.ts).
-const SERVER_EPOCH = randomUUID();
+export const SERVER_EPOCH = randomUUID();
 
 export class ConnectionManager {
   private connections = new Map<string, Set<AuthenticatedWebSocket>>();

@@ -4,6 +4,47 @@ A runbook for standing up the Chord cloud sync server for your own small team
 (5-10 users). One VPS, no Kubernetes, no horizontal scaling — that's a later
 problem. Follow this top to bottom.
 
+**Chord's own box runs this runbook as scripts, in `server/deploy/`:**
+
+- `bootstrap.sh` (root, once, safe to rerun) installs Caddy, Node at `.nvmrc`'s
+  version, the `chord` and `deploy` users, `/opt/chord/{releases,shared,bin}`,
+  the `chord-sync` unit (`chord-sync.service`), the `Caddyfile` and the
+  sudoers line. Its last line counts what it changed.
+- `deploy.sh <tag> <sha>` is the deploy key's forced command. It takes a
+  `git archive` of the tag on stdin, then installs, builds, migrates, flips
+  `/opt/chord/current` and checks that `/health` reports the tag. If the
+  release is unhealthy, it flips back. It keeps the newest 3 releases. In use:
+  `git archive --format=tar <tag> | ssh deploy@<host> deploy <tag> <sha>`.
+- `box-check.sh` is the live check: health over https, the two services, a
+  bootstrap rerun that changes nothing, and the deploy key refused a shell.
+- `/opt/chord/shared/.env` holds the section 3 values. Leave out `PORT`,
+  `HOCUSPOCUS_PORT` and `NODE_ENV`: the unit sets them, because Caddy owns
+  port 1235 and Hocuspocus listens behind it on 1236. It also needs
+  `MIGRATE_DATABASE_URL`, the direct (unpooled) connection string: Neon's host
+  without `-pooler`. The migrate lock is a session advisory lock, and those
+  do not hold through the pooler.
+- The deploy key can't open a shell, but it can ship code: the build runs as
+  `deploy`, and the server runs as `chord` with the production `.env`. Guard
+  it like a production credential.
+- **Rolling back by hand.** `deploy.sh` can't do this: `migrate --status`
+  refuses a release that is older than the database. As root:
+
+  ```bash
+  ls -t /opt/chord/releases                      # the newest 3; pick <prev>
+  ln -sfn /opt/chord/releases/<prev> /opt/chord/current.tmp && mv -T /opt/chord/current.tmp /opt/chord/current
+  printf 'CHORD_RELEASE_TAG=%s\nCHORD_RELEASE_COMMIT=%s\n' <prev> <its sha> > /opt/chord/shared/release.env
+  systemctl restart chord-sync && curl -s 127.0.0.1:1234/health   # names <prev>
+  ```
+
+  Only migrations written expand/contract leave the database usable by
+  `<prev>` (see the lint below).
+- `/health` returns `version` (the deployed tag; `null` outside a deploy),
+  `commit` and `epoch`.
+- Release preflight runs `pnpm run lint:migrations`. A migration that drops,
+  renames or retypes a column, or adds a `NOT NULL` column without a
+  `DEFAULT`, needs a `-- contract-for: vX.Y.Z` header naming a released tag
+  (expand/contract).
+
 ## 1. What you're deploying
 
 One Node process (`server/src/index.ts`) that serves REST + WebSocket on

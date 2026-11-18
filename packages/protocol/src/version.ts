@@ -29,6 +29,15 @@ export const SemverSchema = z.string().regex(SEMVER, 'not a semver version');
 export const ServerHealthSchema = z.object({
   status: z.string(),
   min_desktop_version: SemverSchema.optional(),
+  /**
+   * The release tag the server runs and its commit (devstation-5s42), null
+   * outside a deploy; optional because servers before the deploy scripts do
+   * not send them.
+   */
+  version: z.string().nullable().optional(),
+  commit: z.string().nullable().optional(),
+  /** Fixed per server process; changes on every restart. */
+  epoch: z.string().optional(),
 });
 export type ServerHealth = z.infer<typeof ServerHealthSchema>;
 

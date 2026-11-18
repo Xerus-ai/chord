@@ -20,6 +20,7 @@
     "codex:protocol": "node scripts/generate-codex-protocol.mjs",
     "db:reset": "rm -f \"$HOME/Library/Application Support/chord/chord.db\" \"$HOME/Library/Application Support/chord/chord.db-wal\" \"$HOME/Library/Application Support/chord/chord.db-shm\" \"$HOME/.config/chord/chord.db\" \"$HOME/.config/chord/chord.db-wal\" \"$HOME/.config/chord/chord.db-shm\"",
     "test": "pnpm run build:protocol && vitest run --project node --project node-lane-runs --project node-solo --project server --project browser",
+    "test:deploy-db": "vitest run --project deploy-db",
     "test:codex": "pnpm run build:protocol && vitest run --project node-codex",
     "build": "pnpm run build:protocol && electron-vite build",
     "build:main": "electron-vite build --filter main",
@@ -35,6 +36,7 @@
     "reset": "pnpm run clean && pnpm install",
     "lint": "eslint . --cache --cache-strategy content --cache-location node_modules/.cache/eslint/.eslintcache && pnpm run lint:tokens && pnpm run format:check",
     "lint:tokens": "node scripts/token-audit.mjs",
+    "lint:migrations": "node --experimental-strip-types scripts/release/migration-lint.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm run build:protocol && tsc --noEmit && tsc --noEmit -p scripts/release/tsconfig.json && tsc --noEmit -p server"
