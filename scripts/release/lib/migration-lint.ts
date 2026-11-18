@@ -58,7 +58,6 @@ const EXECUTED_LITERAL = /\bEXECUTE\s*(?:format\s*\(\s*)?$/i;
  * kept as SQL: DDL inside them still runs, and destructiveStatement finds it
  * anywhere in a statement, not only at its start.
  */
-
 function stripCommentsAndStrings(sql: string): string {
   let out = '';
   let i = 0;
@@ -193,23 +192,72 @@ function migrationNumber(name: string): number {
 function swappedConstraints(stripped: string): Set<string> {
   const names = (re: RegExp) => new Set([...stripped.matchAll(re)].map((m) => m[1].toUpperCase()));
   const dropped = names(/\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\S+?)\s*[,;]/gi);
-  const added = names(/\bADD\s+CONSTRAINT\s+(\S+)\s/gi);
-  return new Set([...dropped].filter((n) => added.has(n) && n !== '"Q"'));
+  // Only a foreign key re-added under its name is a swap (its referential action
+  // changes, its key does not): the repo's idempotent DROP IF EXISTS + ADD of a
+  // CHECK or UNIQUE adds a new constraint.
+  const readded = names(/\bADD\s+CONSTRAINT\s+(\S+)\s+FOREIGN\s+KEY\b/gi);
+  return new Set([...dropped].filter((n) => readded.has(n) && n !== '"Q"'));
+}
+
+/**
+ * The SQL with comments blanked and, in `mask`, string literal bodies blanked
+ * too, both the same length as `sql`: positions found in the mask (outside
+ * literals) index the text (literals kept).
+ */
+function maskLiterals(sql: string): { text: string; mask: string } {
+  let text = '';
+  let mask = '';
+  let i = 0;
+  while (i < sql.length) {
+    const c = sql[i];
+    if (c === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') {
+        text += ' ';
+        mask += ' ';
+        i++;
+      }
+    } else if (c === '/' && sql[i + 1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      const stop = end === -1 ? sql.length : end + 2;
+      text += ' '.repeat(stop - i);
+      mask += ' '.repeat(stop - i);
+      i = stop;
+    } else if (c === "'") {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
+        else if (sql[j] === "'") break;
+        else j++;
+      }
+      const stop = Math.min(j + 1, sql.length);
+      text += sql.slice(i, stop);
+      mask += `'${' '.repeat(Math.max(stop - i - 2, 0))}'`.slice(0, stop - i);
+      i = stop;
+    } else {
+      text += c;
+      mask += c;
+      i++;
+    }
+  }
+  return { text, mask };
 }
 
 /**
  * Each EXECUTE whose argument is not one plain string literal (or format() of
- * one): concatenation, a variable, E'...' or parentheses hide the SQL it runs.
+ * one with no %s, which fills SQL from arguments the lint never reads):
+ * concatenation, a variable, E'...' or parentheses hide the SQL it runs.
  */
 function dynamicExecutes(sql: string): string[] {
-  const text = sql.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
-  const plain = /^\s*(?:format\s*\(\s*)?'(?:[^']|'')*'\s*(?:;|,|\)|$)/i;
+  const { text, mask } = maskLiterals(sql);
+  const plain = /^\s*(format\s*\(\s*)?'((?:[^']|'')*)'\s*(?:;|,|\)|$)/i;
   const out: string[] = [];
-  for (const m of text.matchAll(/\bEXECUTE\b/gi)) {
+  for (const m of mask.matchAll(/\bEXECUTE\b/gi)) {
     const rest = text.slice((m.index ?? 0) + m[0].length);
     // A trigger's EXECUTE FUNCTION/PROCEDURE names a function: not dynamic SQL.
     if (/^\s*(?:FUNCTION|PROCEDURE)\b/i.test(rest)) continue;
-    if (!plain.test(rest)) out.push(`EXECUTE${rest.slice(0, 80)}`.replace(/\s+/g, ' ').trim());
+    const literal = plain.exec(rest);
+    if (literal && !(literal[1] && /%s/i.test(literal[2]))) continue;
+    out.push(`EXECUTE${rest.slice(0, 80)}`.replace(/\s+/g, ' ').trim());
   }
   return out;
 }
