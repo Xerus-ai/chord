@@ -1,6 +1,7 @@
 import type { CloudChatMessage } from '@chord/protocol';
 import { classifySeq } from '@shared/session-stream-reducers';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
+import { serverTraffic } from '@main/core/app/server-traffic';
 import {
   ingestCloudChatMessage,
   reseedWorkItemChat,
@@ -94,6 +95,22 @@ class DeviceSocketService implements IInitializable, IDisposable {
   // stack a second concurrent walk over the same pages.
   private reseeding = new Set<string>();
 
+  constructor() {
+    // The version handshake (devstation-mg6u.5): a turned-away app drops its
+    // socket and rooms, and reconnects (rejoining in onopen) once supported.
+    serverTraffic.subscribe((open) => {
+      if (open) {
+        this.kick();
+        return;
+      }
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+      const socket = this.socket;
+      this.handleDisconnect();
+      socket?.close();
+    });
+  }
+
   initialize(): void {
     this.scheduleConnect(0);
   }
@@ -120,7 +137,7 @@ class DeviceSocketService implements IInitializable, IDisposable {
   }
 
   private scheduleConnect(delayMs: number): void {
-    if (this.disposed || this.reconnectTimer) return;
+    if (this.disposed || this.reconnectTimer || !serverTraffic.isOpen()) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
@@ -144,6 +161,8 @@ class DeviceSocketService implements IInitializable, IDisposable {
         return;
       }
       const deviceId = await getDeviceId();
+      // Paused while the session and token were read.
+      if (this.disposed || this.socket || !serverTraffic.isOpen()) return;
 
       const socket = new WebSocket(`${cloudWsUrl()}?device_id=${encodeURIComponent(deviceId)}`, [
         `auth-${token}`,
@@ -164,7 +183,10 @@ class DeviceSocketService implements IInitializable, IDisposable {
       socket.onmessage = (event) => {
         this.handleFrame(typeof event.data === 'string' ? event.data : '');
       };
-      socket.onclose = () => this.handleDisconnect();
+      // Only the current socket's close: one dropped on a pause was already handled.
+      socket.onclose = () => {
+        if (this.socket === socket) this.handleDisconnect();
+      };
       socket.onerror = () => {
         // onclose always follows onerror; reconnect is handled there.
       };

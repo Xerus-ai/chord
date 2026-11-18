@@ -9,6 +9,7 @@ import type {
 import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { isOwnedByAnotherAccount } from '@shared/work-item-ownership';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
+import { serverTraffic } from '@main/core/app/server-traffic';
 import type {
   ArtifactVersionUploadPayload,
   CloudArtifactCreatePayload,
@@ -50,6 +51,8 @@ const PROCESS_KICK_DELAY_MS = 500;
 const BATCH_SIZE = 50;
 const MAX_DRAIN_PASSES = 4;
 
+type Reconcile = 'workItems' | 'artifacts' | 'chatMessages';
+
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -64,6 +67,15 @@ export class SyncQueueService implements IInitializable, IDisposable {
   private timer: ReturnType<typeof setInterval> | null = null;
   private kickTimer: ReturnType<typeof setTimeout> | null = null;
   private processing = false;
+  // Reconciles asked for while server traffic was closed run when it opens, or
+  // a sign-in during the pause would never reconcile (devstation-mg6u.5).
+  private readonly reconcilesOwed = new Set<Reconcile>();
+
+  constructor() {
+    serverTraffic.subscribe((open) => {
+      if (open) void this.runOwedReconciles();
+    });
+  }
 
   initialize(): void {
     this.resetInterruptedOperations();
@@ -228,17 +240,35 @@ export class SyncQueueService implements IInitializable, IDisposable {
 
   /** Startup backfill of local work items; see sync-queue-reconcile.ts. */
   async reconcileLocalWorkItems(): Promise<void> {
+    if (this.owe('workItems')) return;
     if (await reconcileLocalWorkItemRows()) this.scheduleProcessing();
   }
 
   /** Startup backfill of local artifacts and their device comments. */
   async reconcileLocalArtifacts(): Promise<void> {
+    if (this.owe('artifacts')) return;
     if (await reconcileLocalArtifactRows()) this.scheduleProcessing();
   }
 
   /** Startup backfill of never-synced local chat rows. */
   async reconcileLocalChatMessages(): Promise<void> {
+    if (this.owe('chatMessages')) return;
     if (await reconcileLocalChatRows()) this.scheduleProcessing();
+  }
+
+  private owe(reconcile: Reconcile): boolean {
+    if (serverTraffic.isOpen()) return false;
+    this.reconcilesOwed.add(reconcile);
+    return true;
+  }
+
+  private async runOwedReconciles(): Promise<void> {
+    const owed = [...this.reconcilesOwed];
+    this.reconcilesOwed.clear();
+    if (owed.includes('workItems')) await this.reconcileLocalWorkItems();
+    if (owed.includes('artifacts')) await this.reconcileLocalArtifacts();
+    if (owed.includes('chatMessages')) await this.reconcileLocalChatMessages();
+    this.scheduleProcessing(); // rows queued while closed
   }
 
   getFailedOperations(): SyncQueueRow[] {
@@ -287,7 +317,7 @@ export class SyncQueueService implements IInitializable, IDisposable {
   }
 
   async processQueue(): Promise<void> {
-    if (this.processing) return;
+    if (this.processing || !serverTraffic.isOpen()) return;
     this.processing = true;
     try {
       const session = await chordAccountService.getSession();
@@ -335,6 +365,9 @@ export class SyncQueueService implements IInitializable, IDisposable {
       let deliveredThisPass = false;
       let stopped = false;
       for (const row of rows) {
+        // A verdict mid-cycle: the row stays pending, unclaimed, its retries unspent.
+        stopped = !serverTraffic.isOpen();
+        if (stopped) break;
         const outcome = await processSyncRow(row, (claimed) =>
           sendSyncOperation(claimed, orgId, (workItemId, artifactId) =>
             this.enqueueArtifactCommentImport(workItemId, artifactId)

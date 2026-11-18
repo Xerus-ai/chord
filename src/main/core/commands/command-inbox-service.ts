@@ -1,6 +1,7 @@
 import type { CloudCommand } from '@chord/protocol';
 import { eq } from 'drizzle-orm';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
+import { serverTraffic } from '@main/core/app/server-traffic';
 import { db } from '@main/db/client';
 import { commandLedger } from '@main/db/schema-sync';
 import { workItems } from '@main/db/schema-work-items';
@@ -43,6 +44,13 @@ class CommandInboxService implements IInitializable, IDisposable {
   private kickTimer: ReturnType<typeof setTimeout> | null = null;
   private processing = false;
   private pendingKick = false;
+
+  constructor() {
+    // Fetch what waited while the version handshake held traffic (mg6u.5).
+    serverTraffic.subscribe((open) => {
+      if (open) this.kick();
+    });
+  }
 
   initialize(): void {
     this.timer = setInterval(() => void this.process(), FETCH_INTERVAL_MS);
@@ -89,6 +97,7 @@ class CommandInboxService implements IInitializable, IDisposable {
   }
 
   private async drain(): Promise<void> {
+    if (!serverTraffic.isOpen()) return;
     const session = await chordAccountService.getSession();
     if (session.authState !== 'signed_in') return;
 
@@ -103,6 +112,8 @@ class CommandInboxService implements IInitializable, IDisposable {
     const commands = await fetchCommands(deviceId, localIds);
 
     for (const command of commands) {
+      // Turned away mid-drain: the rest stay on the server for the next fetch.
+      if (!serverTraffic.isOpen()) return;
       await this.handleCommand(command, deviceId);
     }
   }

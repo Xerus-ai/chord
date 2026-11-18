@@ -8,8 +8,7 @@ import { IntegrationsProvider } from './features/integrations/integrations-provi
 import { NotificationDropdown } from './features/notifications/notification-dropdown';
 import { useNotifications } from './features/notifications/use-notifications';
 import { OnboardingView } from './features/onboarding/onboarding-view';
-import { UpdateRequired } from './features/update-required/update-required';
-import { useDesktopCompatibility } from './features/update-required/use-desktop-compatibility';
+import { DesktopCompatibilityGate } from './features/update-required/desktop-compatibility-gate';
 import { useAccountSession } from './lib/hooks/useAccount';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
@@ -23,6 +22,7 @@ import { queryClient } from './lib/query-client';
 import { navigationStore } from './lib/stores/navigation-store';
 import { SyncSocketContextProvider } from './lib/sync/sync-socket-provider';
 import { RightSidebarProvider } from './lib/ui/right-sidebar';
+import { StartupPlaceholder } from './lib/ui/startup-placeholder';
 import { TooltipProvider } from './lib/ui/tooltip';
 import { cn } from './utils/utils';
 
@@ -147,7 +147,6 @@ function AppRoot() {
   // sign-out invalidates this key, so the gate re-renders straight back to
   // AuthGate instead of leaving a signed-out app running until restart.
   const { data: session, error, isFetching, refetch } = useAccountSession();
-  const { data: compatibility } = useDesktopCompatibility();
   const userId = session?.isSignedIn
     ? ((session.user as { userId?: string } | undefined)?.userId ?? null)
     : null;
@@ -173,16 +172,6 @@ function AppRoot() {
     setOnboardingCompletedFor(userId);
   }, [userId]);
 
-  // The sync server no longer supports this version (devstation-mg6u.2): nothing
-  // else works until the app updates, so this comes before the session gates.
-  if (compatibility?.state === 'update_required') {
-    return (
-      <ThemeProvider>
-        <UpdateRequired current={compatibility.current} minimum={compatibility.minimum} />
-      </ThemeProvider>
-    );
-  }
-
   // No session data yet: unknown, never "signed out". A read that failed
   // outright gets a retry screen; one still in flight keeps the blank
   // placeholder. Once data exists it is kept across background refetch
@@ -201,7 +190,7 @@ function AppRoot() {
     }
     return (
       <ThemeProvider>
-        <div className="flex h-screen items-center justify-center bg-surface" />
+        <StartupPlaceholder />
       </ThemeProvider>
     );
   }
@@ -229,7 +218,11 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <PostHogFeatureFlagsProvider>
-        <AppRoot />
+        {/* The sync server's verdict on this version comes before the session
+            gates: nothing else works until an unsupported app updates. */}
+        <DesktopCompatibilityGate frame={ThemeProvider}>
+          <AppRoot />
+        </DesktopCompatibilityGate>
       </PostHogFeatureFlagsProvider>
     </QueryClientProvider>
   );

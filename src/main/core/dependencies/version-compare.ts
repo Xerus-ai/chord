@@ -10,7 +10,8 @@ function parseVersion(version: string): [number, number, number] {
  * Orders two `X.Y.Z` versions part by part: -1 when `a` is older, 1 when newer,
  * 0 when equal. Agent CLIs and their release sources report plain `X.Y.Z`;
  * anything else (a prerelease, a non-version) throws rather than being read as
- * "no update".
+ * "no update". Not the app's own version: that is semver with prereleases,
+ * compared by @chord/protocol's compareVersions (packages/protocol/src/version.ts).
  */
 export function compareVersions(a: string, b: string): -1 | 0 | 1 {
   const left = parseVersion(a);

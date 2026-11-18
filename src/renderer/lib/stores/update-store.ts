@@ -156,7 +156,11 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
       if (!res.success) {
         set({ state: { status: 'error', message: res.error ?? 'Failed to check for updates' } });
       } else if (res.result === null) {
-        set({ state: { status: 'idle' } });
+        // A finished check that found nothing: say so. The updater's own
+        // not-available event says it too, but an inactive updater (an
+        // unpackaged build) sends none, and the update-required screen's
+        // button then looked dead (devstation-mg6u.5 e2e).
+        set({ state: { status: 'not-available' } });
       }
     } catch {
       set({ state: { status: 'error', message: 'Failed to check for updates' } });

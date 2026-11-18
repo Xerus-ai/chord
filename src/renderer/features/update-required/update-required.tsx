@@ -43,36 +43,48 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
   const install = useUpdateStore((s) => s.install);
   const openLatest = useUpdateStore((s) => s.openLatest);
   const primary = primaryAction(state, { check, download, install });
+  // Once the updater has nothing to offer, the download is the way forward: it
+  // carries the primary style and the check steps back.
+  const downloadFirst = state.status === 'not-available' || state.status === 'error';
+  const notFound = 'No update was found automatically. Download the latest version instead.';
 
   return (
     <main className="flex h-screen flex-col items-center justify-center gap-4 overflow-y-auto bg-surface p-6">
       <div className="flex max-w-[320px] flex-col items-center gap-1.5 text-center">
         <h1 className="text-title tracking-title font-semibold text-text">Update required</h1>
-        <p className="text-body tracking-body text-text-muted">
+        <p className="text-body tracking-body text-balance text-text-muted">
           This version of Chord ({current}) is no longer supported by the sync server. Version{' '}
           {minimum} or newer is required.
         </p>
         {state.status === 'not-available' && (
-          <p className="text-body tracking-body text-text-muted">
-            No update was found automatically. Download the latest version instead.
-          </p>
+          <p className="mt-2 text-body tracking-body text-balance text-text-muted">{notFound}</p>
         )}
         {state.status === 'error' && (
-          <p role="alert" className="text-body tracking-body text-status-err">
+          <p role="alert" className="mt-2 text-body tracking-body text-balance text-status-err">
             {state.message}
           </p>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button size="lg" disabled={primary === null} onClick={() => void primary?.run()}>
+        <Button
+          size="lg"
+          variant={downloadFirst ? 'outline' : 'default'}
+          disabled={primary === null}
+          onClick={() => void primary?.run()}
+        >
           {primary?.label ?? busyLabel(state)}
         </Button>
-        <Button size="lg" variant="ghost" onClick={() => void openLatest()}>
+        {/* outline when secondary: a fill-less ghost button reads as text on the light surface */}
+        <Button
+          size="lg"
+          variant={downloadFirst ? 'default' : 'outline'}
+          onClick={() => void openLatest()}
+        >
           Download from the website (closes Chord)
         </Button>
       </div>
       <p aria-live="polite" className="sr-only">
-        {primary === null ? busyLabel(state) : ''}
+        {primary === null ? busyLabel(state) : state.status === 'not-available' ? notFound : ''}
       </p>
     </main>
   );

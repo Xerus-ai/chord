@@ -7,6 +7,7 @@ import {
   chordAccountService,
   type CachedProfile,
 } from '@main/core/account/services/chord-account-service';
+import { serverTraffic, ServerTrafficPausedError } from '@main/core/app/server-traffic';
 import { KV } from '@main/db/kv';
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -116,6 +117,10 @@ export async function cloudFetch(
   init?: RequestInit,
   timeoutMs = REQUEST_TIMEOUT_MS
 ): Promise<Response> {
+  // Every main-process request to the sync server passes here, so a caller the
+  // senders' own checks do not cover (an agent's publish, an RPC) is refused too
+  // while the server has turned this version away.
+  if (!serverTraffic.isOpen()) throw new ServerTrafficPausedError(path);
   const token = await chordAccountService.getAccessToken();
   if (!token) throw new Error('Not signed in');
 
