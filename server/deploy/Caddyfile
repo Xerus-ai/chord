@@ -2,11 +2,12 @@
 # bootstrap.sh. The client reaches REST and /ws on 443 and Hocuspocus on 1235
 # of the same name (VITE_COLLAB_WS_URL=wss://<domain>:1235), so both listeners
 # share one certificate. The DNS record must stay DNS-only (not proxied) for
-# the certificate and port 1235 to work.
-api.chord.xerus.ai {
+# the certificate and port 1235 to work. CHORD_API_HOST is replaced by
+# render-caddyfile.sh from bootstrap's environment.
+CHORD_API_HOST {
 	reverse_proxy 127.0.0.1:1234
 }
 
-api.chord.xerus.ai:1235 {
+CHORD_API_HOST:1235 {
 	reverse_proxy 127.0.0.1:1236
 }

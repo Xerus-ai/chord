@@ -113,6 +113,11 @@ CHORD_RELEASE_TAG=<tag> pnpm run migrate   # what deploy.sh runs: apply every fi
 pnpm run migrate --unreleased              # the same, on a disposable or local database only
 ```
 
+**One runner at a time.** migrate takes a database-wide advisory lock. A second
+runner waits up to `CHORD_MIGRATE_LOCK_WAIT_S` seconds (default 120), then
+refuses naming the session that holds it; each statement waits at most 30 s for
+a table lock before its file rolls back.
+
 **A write needs a release.** Dev and prod share one database, so a plain
 `pnpm run migrate` refuses to apply (or `--baseline`) unless `CHORD_RELEASE_TAG`
 is set, which deploy.sh does with the tag it deploys, or `--unreleased` is

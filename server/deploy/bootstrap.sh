@@ -5,7 +5,9 @@
 #
 #   git archive HEAD .nvmrc server/deploy | ssh root@<host> \
 #     'rm -rf /tmp/chord-bootstrap && mkdir /tmp/chord-bootstrap && tar -x -C /tmp/chord-bootstrap \
-#      && bash /tmp/chord-bootstrap/server/deploy/bootstrap.sh "<deploy public key>"'
+#      && CHORD_API_HOST=<api host> bash /tmp/chord-bootstrap/server/deploy/bootstrap.sh "<deploy public key>"'
+#
+# CHORD_API_HOST is the API's DNS name; the Caddyfile is rendered with it.
 #
 # Idempotent: every step checks before it acts, and the last line counts what
 # changed ("bootstrap: changed 0" on a box that is already right). The deploy
@@ -27,6 +29,7 @@ set -Eeuo pipefail
 trap 'echo "bootstrap: failed at line $LINENO" >&2' ERR
 
 [ "$(id -u)" = 0 ] || { echo "bootstrap: run as root" >&2; exit 2; }
+[ -n "${CHORD_API_HOST:-}" ] || { echo "bootstrap: set CHORD_API_HOST (the API host the Caddyfile serves)" >&2; exit 2; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 nvmrc=$here/../../.nvmrc
 [ -f "$nvmrc" ] || { echo "bootstrap: $nvmrc missing; archive .nvmrc with server/deploy" >&2; exit 2; }
@@ -194,7 +197,7 @@ if ! systemctl is-enabled --quiet chord-sync.service 2>/dev/null; then
 fi
 
 caddy_new=$(mktemp)
-cp "$here/Caddyfile" "$caddy_new"
+bash "$here/render-caddyfile.sh" "$here/Caddyfile" "$caddy_new"
 caddy validate --adapter caddyfile --config "$caddy_new" >/dev/null 2>&1 ||
   { caddy validate --adapter caddyfile --config "$caddy_new"; exit 1; }
 if install_file "$caddy_new" /etc/caddy/Caddyfile 644 root:root; then
