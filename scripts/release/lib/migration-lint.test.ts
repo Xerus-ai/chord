@@ -84,7 +84,6 @@ describe('migration lint', () => {
 
     // Not destructive to a server still running the previous release.
     expect(lint('CREATE INDEX a_b_idx ON a (b);')).toEqual([]);
-    expect(lint('ALTER TABLE a ADD CONSTRAINT a_pk PRIMARY KEY (id);')).toEqual([]);
     expect(lint('ALTER TABLE a ALTER COLUMN title DROP NOT NULL;')).toEqual([]);
     expect(lint('ALTER TABLE a ALTER COLUMN status SET DEFAULT 0;')).toEqual([]);
     expect(lint('CREATE TABLE a (id text PRIMARY KEY, type text NOT NULL);')).toEqual([]);
@@ -148,6 +147,25 @@ describe('migration lint', () => {
     expect(lint('CREATE UNIQUE INDEX CONCURRENTLY a_b_uq ON a (b);')).toHaveLength(1);
 
     expect(lint('ALTER TABLE a DROP CONSTRAINT a_b_key;')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ADD CONSTRAINT a_pk PRIMARY KEY (id);')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ADD PRIMARY KEY (id);')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ADD CONSTRAINT a_ex EXCLUDE USING gist (r WITH &&);')).toHaveLength(
+      1
+    );
+    // A swap keeps the key: the same constraint dropped and added back is not flagged.
+    expect(
+      lint(
+        'ALTER TABLE a DROP CONSTRAINT a_t_fkey;\nALTER TABLE a ADD CONSTRAINT a_t_fkey FOREIGN KEY (t) REFERENCES t (id) ON DELETE CASCADE;'
+      )
+    ).toEqual([]);
+    // EXECUTE of anything but one plain literal hides the SQL it runs.
+    expect(lint("DO $$ BEGIN EXECUTE 'ALTER TABLE t ' || 'DROP COLUMN c'; END $$;")).toHaveLength(
+      1
+    );
+    expect(lint('DO $$ DECLARE s text; BEGIN EXECUTE s; END $$;')).toHaveLength(1);
+    expect(lint("DO $$ BEGIN EXECUTE E'DROP TABLE t'; END $$;")).toHaveLength(1);
+    expect(lint("DO $$ BEGIN EXECUTE ('DROP TABLE t'); END $$;")).toHaveLength(1);
+    expect(lint("DO $$ BEGIN EXECUTE 'SELECT 1'; END $$;")).toEqual([]);
     expect(lint('DROP INDEX IF EXISTS a_b_idx;')).toHaveLength(1);
 
     expect(lint("DO $$ BEGIN EXECUTE 'ALTER TABLE a DROP COLUMN b'; END $$;")).toHaveLength(1);

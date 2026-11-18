@@ -127,12 +127,19 @@ const ALTER_COLUMN_SET_NOT_NULL = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+SET
 const ALTER_COLUMN_DROP_DEFAULT = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+DROP\s+DEFAULT\b`);
 
 /** Why one ALTER TABLE action breaks the previous release, or null. */
-function destructiveAction(action: string): string | null {
+function destructiveAction(action: string, swapped: Set<string>): string | null {
   const a = action.toUpperCase();
-  if (/^DROP\s+CONSTRAINT\b/.test(a)) {
-    return "drops a constraint (the previous release's ON CONFLICT may need its key)";
+  const dropped = /^DROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\S+)/.exec(a);
+  if (dropped) {
+    if (swapped.has(dropped[1])) return null;
+    return "drops a constraint: if the previous release's ON CONFLICT names its key, that release breaks";
   }
-  if (/^ADD\s+(?:CONSTRAINT\s+\S+\s+)?(?:UNIQUE|CHECK|FOREIGN\s+KEY)\b/.test(a)) {
+  const added =
+    /^ADD\s+(?:CONSTRAINT\s+(\S+)\s+)?(?:UNIQUE|CHECK|FOREIGN\s+KEY|PRIMARY\s+KEY|EXCLUDE|NOT\s+NULL)\b/.exec(
+      a
+    );
+  if (added) {
+    if (added[1] && swapped.has(added[1])) return null;
     return "adds a constraint the previous release's writes may violate";
   }
   if (/^DROP\b/.test(a)) return 'drops a column';
@@ -151,12 +158,12 @@ function destructiveAction(action: string): string | null {
 }
 
 /** Why one statement breaks the previous release, or null. */
-function destructiveStatement(statement: string): string | null {
+function destructiveStatement(statement: string, swapped: Set<string>): string | null {
   const drop = DROP_OBJECT.exec(statement);
   if (drop) return `drops a ${drop[1].toLowerCase().replace(/\s+/g, ' ')}`;
   if (/\bTRUNCATE\b/i.test(statement)) return 'truncates a table';
   if (/\bDROP\s+INDEX\b/i.test(statement)) {
-    return "drops an index (the previous release's ON CONFLICT may need it)";
+    return "drops an index: if it is the previous release's ON CONFLICT target, that release breaks";
   }
   if (/\bCREATE\s+UNIQUE\s+INDEX\b/i.test(statement)) {
     return "adds a unique index the previous release's writes may violate";
@@ -165,7 +172,7 @@ function destructiveStatement(statement: string): string | null {
   const alter = ALTER_TABLE.exec(statement);
   if (!alter) return null;
   for (const action of splitActions(alter[1])) {
-    const reason = destructiveAction(action);
+    const reason = destructiveAction(action, swapped);
     if (reason) return reason;
   }
   return null;
@@ -175,6 +182,33 @@ function migrationNumber(name: string): number {
   const m = /^(\d{4})_/.exec(name);
   if (!m) throw new Error(`not a migration file name: ${name}`);
   return Number(m[1]);
+}
+
+/**
+ * Constraint names a file both drops and adds back: a swap (e.g. a foreign key
+ * re-created with another ON DELETE action) keeps the key, so neither half is
+ * flagged.
+ */
+function swappedConstraints(stripped: string): Set<string> {
+  const names = (re: RegExp) => new Set([...stripped.matchAll(re)].map((m) => m[1].toUpperCase()));
+  const dropped = names(/\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\S+?)\s*[,;]/gi);
+  const added = names(/\bADD\s+CONSTRAINT\s+(\S+)\s/gi);
+  return new Set([...dropped].filter((n) => added.has(n) && n !== '"Q"'));
+}
+
+/**
+ * Each EXECUTE whose argument is not one plain string literal (or format() of
+ * one): concatenation, a variable, E'...' or parentheses hide the SQL it runs.
+ */
+function dynamicExecutes(sql: string): string[] {
+  const text = sql.replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const plain = /^\s*(?:format\s*\(\s*)?'(?:[^']|'')*'\s*(?:;|,|\)|$)/i;
+  const out: string[] = [];
+  for (const m of text.matchAll(/\bEXECUTE\b/gi)) {
+    const rest = text.slice((m.index ?? 0) + m[0].length);
+    if (!plain.test(rest)) out.push(`EXECUTE${rest.slice(0, 80)}`.replace(/\s+/g, ' ').trim());
+  }
+  return out;
 }
 
 /**
@@ -190,13 +224,24 @@ export function lintMigrations(
   for (const file of files) {
     if (migrationNumber(file.name) <= opts.after) continue;
     const tag = contractFor(file.sql);
-    const statements = stripCommentsAndStrings(file.sql)
+    const stripped = stripCommentsAndStrings(file.sql);
+    const statements = stripped
       .split(';')
       .map((s) => s.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
+    const swapped = swappedConstraints(stripped);
+    const checks: { statement: string; why: string }[] = [];
     for (const statement of statements) {
-      const why = destructiveStatement(statement);
-      if (!why) continue;
+      const why = destructiveStatement(statement, swapped);
+      if (why) checks.push({ statement, why });
+    }
+    for (const snippet of dynamicExecutes(file.sql)) {
+      checks.push({
+        statement: snippet,
+        why: 'runs dynamic SQL (EXECUTE of something other than one string literal) the lint cannot read',
+      });
+    }
+    for (const { statement, why } of checks) {
       if (tag && released.has(tag)) continue;
       findings.push({
         file: file.name,
@@ -213,7 +258,8 @@ export function lintMigrations(
 /**
  * The tags a contract-for header may name when linting the files since `since`:
  * the release tags in its history, so a tag cut after the previous release does
- * not vouch for it.
+ * not vouch for it. A hotfix tag counts only once its release branch is merged
+ * back into the line `since` was cut from.
  */
 export function releasedTagsAt(since: string, git: (...args: string[]) => string): string[] {
   return git('tag', '--merged', since, '--list', 'v*').split('\n').filter(Boolean);
