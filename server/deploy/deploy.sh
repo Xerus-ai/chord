@@ -141,8 +141,9 @@ link_shared() {
 
 # shellcheck disable=SC2329 # called through run_step
 prepare_release() {
-  pnpm install --frozen-lockfile --ignore-scripts
-  pnpm --filter @chord/sync-server run build
+  # Chained: run_step is called inside `if`, where bash ignores errexit.
+  pnpm install --frozen-lockfile --ignore-scripts &&
+    pnpm --filter @chord/sync-server run build
 }
 
 # shellcheck disable=SC2329 # called by migrate_release, through run_step
@@ -166,8 +167,11 @@ migrate_release() {
   before=$(pending_count "$url") || return 1
   DATABASE_URL=$url timeout 900 pnpm -s run migrate && return 0
   # Each file commits on its own: a failure after the first leaves some applied.
-  after=$(pending_count "$url") || after=$before
-  [ "$after" -lt "$before" ] && touch "$dest/.migrated-partly"
+  # A status that fails too (the database is likely down) cannot say nothing
+  # was applied: count it as applied, so the log errs towards schema_ahead.
+  if ! after=$(pending_count "$url") || [ "$after" -lt "$before" ]; then
+    touch "$dest/.migrated-partly"
+  fi
   return 1
 }
 
