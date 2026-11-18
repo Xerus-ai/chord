@@ -158,6 +158,20 @@ describe('migration lint', () => {
         'ALTER TABLE a DROP CONSTRAINT a_t_fkey;\nALTER TABLE a ADD CONSTRAINT a_t_fkey FOREIGN KEY (t) REFERENCES t (id) ON DELETE CASCADE;'
       )
     ).toEqual([]);
+    // The idempotent way to add a NEW constraint drops it first: still a new constraint.
+    expect(
+      lint(
+        "ALTER TABLE a DROP CONSTRAINT IF EXISTS a_status_check;\nALTER TABLE a ADD CONSTRAINT a_status_check CHECK (status IN ('x', 'y'));"
+      )
+    ).toHaveLength(2);
+    // format() fills %s from arguments the lint never reads.
+    expect(
+      lint("DO $$ BEGIN EXECUTE format('ALTER TABLE t %s', 'DROP COLUMN c'); END $$;")
+    ).toHaveLength(1);
+    // A '--' inside a literal does not hide the EXECUTE after it.
+    expect(lint("DO $$ BEGIN PERFORM '--'; EXECUTE s; END $$;")).toHaveLength(1);
+    // The word EXECUTE inside a literal is not an EXECUTE.
+    expect(lint("INSERT INTO notes (body) VALUES ('EXECUTE s');")).toEqual([]);
     // EXECUTE of anything but one plain literal hides the SQL it runs.
     expect(lint("DO $$ BEGIN EXECUTE 'ALTER TABLE t ' || 'DROP COLUMN c'; END $$;")).toHaveLength(
       1
