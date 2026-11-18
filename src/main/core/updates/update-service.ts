@@ -84,9 +84,12 @@ class UpdateService implements IInitializable, IDisposable {
     this.scheduleNextCheck(STARTUP_DELAY_MS);
   }
 
-  /** False in a dev build or before initialize: there is no updater to run a check. */
+  /**
+   * Whether a check can run: false in a dev build, before initialize, and in an
+   * unpackaged build, where electron-updater skips every check and answers null.
+   */
   isActive(): boolean {
-    return this.active;
+    return this.active && this.autoUpdater.isUpdaterActive();
   }
 
   /** The loaded updater; only an active service (initialized outside dev) has one. */

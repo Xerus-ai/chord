@@ -200,11 +200,11 @@ async function main() {
     const check = page.getByRole('button', { name: /check for updates/i });
     verdict('offers Check for updates', (await check.count()) === 1, '');
     await check.click();
-    // The updater answers with progress, "nothing found", "cannot update
-    // itself", or its error; any of them is the screen reacting. An unpackaged
-    // build has no update feed.
+    // The e2e app is a production build run unpackaged: electron-updater skips
+    // every check there, so the real updater path must answer that this build
+    // cannot update itself, not that no update was found.
     const reacted = await page
-      .getByText(/checking…|downloading|no update was found|cannot update itself|failed|error/i)
+      .getByText(/cannot update itself/i)
       .first()
       .waitFor({ timeout: 30_000 })
       .then(() => true)
@@ -212,7 +212,7 @@ async function main() {
     await settle(page);
     await page.screenshot({ path: shot('checked') });
     verdict(
-      'Check for updates shows the updater working or its answer',
+      'Check for updates in an unpackaged build says it cannot update itself',
       reacted,
       (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 200)
     );
