@@ -317,8 +317,30 @@ If you ever rebuild the Electron client with a change to git-state pushes
 server before that client build reaches any user.** An old server doesn't
 error on the new field — it silently ignores `content_hash` and applies its
 old full-replace logic, which can drop content the new client assumed was
-already stored. This is the one hard ordering constraint in this codebase;
-everything else degrades gracefully in either direction.
+already stored. Raising the minimum desktop version (below) is the one other
+ordering constraint, in the opposite direction; everything else degrades
+gracefully in either direction.
+
+### Raising the minimum desktop version: client before server
+
+`MIN_DESKTOP_VERSION` (`packages/protocol/src/version.ts`) is what `/health`
+advertises, and an app below it stops talking to the server and shows only the
+update screen. Raise it in a server deploy **only after** a desktop release that
+meets it is published and reachable, or every paused user is told to update to
+something that does not exist yet:
+
+1. Publish the desktop release that meets the new minimum on every channel
+   that carries users (stable, and canary when canary users must stay
+   connected): installers uploaded to R2 first, then the update manifests.
+2. Probe each channel's tag: `node scripts/release/probe.ts --tag vX.Y.Z --out <receipt>`
+   must pass, meaning every manifest and the installers it names answer 200.
+3. Only then merge the change that raises `MIN_DESKTOP_VERSION` and deploy that
+   server release.
+
+Lowering it, or rolling the server back to a lower minimum, is safe at any
+time; an app it paused resumes on its next version check (every 30 minutes) or
+on restart. Write a minimum as `X.Y.Z-0` when canaries of X.Y.Z carry the
+compatible client too, since `X.Y.Z-canary.N` sorts below `X.Y.Z`.
 
 ## 8. Upgrades & restarts
 
