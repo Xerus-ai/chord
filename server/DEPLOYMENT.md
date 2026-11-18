@@ -115,8 +115,8 @@ pnpm run migrate --unreleased              # the same, on a disposable or local 
 
 **One runner at a time.** migrate takes a database-wide advisory lock. A second
 runner waits up to `CHORD_MIGRATE_LOCK_WAIT_S` seconds (default 120), then
-refuses naming the session that holds it; each statement waits at most 30 s for
-a table lock before its file rolls back.
+refuses naming the session that holds it; each wait for a table lock inside a
+migration gives up after 30 s and rolls that file back.
 
 **A write needs a release.** Dev and prod share one database, so a plain
 `pnpm run migrate` refuses to apply (or `--baseline`) unless `CHORD_RELEASE_TAG`

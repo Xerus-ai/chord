@@ -62,7 +62,7 @@ async function acquireRunLock(client: Client, waitSeconds: number): Promise<void
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   const { rows } = await client.query<{ pid: number }>(
-    "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND ((classid::bigint << 32) | objid::bigint) = $1",
+    "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1 AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND ((classid::bigint << 32) | objid::bigint) = $1",
     [ADVISORY_LOCK_KEY]
   );
   const holder = rows[0] ? `held by pid ${rows[0].pid}` : 'held by another session';

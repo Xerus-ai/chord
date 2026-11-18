@@ -26,7 +26,9 @@
 # the live tag succeeds without changing anything.
 #
 # Exit: 0 live, 1 failed (the previous release is live; on a first deploy there
-# is none), 2 refused request, 75 another deploy holds the lock.
+# is none; or the new release is live and only the pnpm store prune after it
+# failed, which deploy.log names), 2 refused request, 75 another deploy holds
+# the lock.
 #
 # DEPLOY_ROOT, DEPLOY_PREPARE, DEPLOY_MIGRATE, DEPLOY_STORE_PRUNE, DEPLOY_RESTART, DEPLOY_HEALTH_URL
 # and DEPLOY_HEALTH_INTERVAL exist for scripts/release/deploy-sh.test.ts; sshd
@@ -179,7 +181,7 @@ migrate_release() {
 
 # shellcheck disable=SC2329 # called through run_step
 store_prune() {
-  pnpm store prune
+  timeout 600 pnpm store prune
 }
 
 # Runs a step in the release: the DEPLOY_* override when set, else the function.

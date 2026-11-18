@@ -45,7 +45,7 @@ check services "$ok" "chord-sync caddy: $states"
 
 # 3. Bootstrap is idempotent: a second run reports nothing changed.
 summary=$(ssh "${ssh_opts[@]}" -i "$root_key" "root@$host" \
-  'bash /opt/chord/current/server/deploy/bootstrap.sh 2>&1 | tail -1') || summary="bootstrap failed: $summary"
+  "CHORD_API_HOST=$domain bash /opt/chord/current/server/deploy/bootstrap.sh 2>&1 | tail -1") || summary="bootstrap failed: $summary"
 [ "$summary" = "bootstrap: changed 0" ] && ok=yes || ok=no
 check bootstrap-idempotent "$ok" "$summary"
 

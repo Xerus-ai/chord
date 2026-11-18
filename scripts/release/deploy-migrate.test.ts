@@ -217,14 +217,17 @@ process.stdin.on('data', async () => { await c.end(); process.exit(0); });`,
         env: { ...process.env, DATABASE_URL, CHORD_MIGRATE_LOCK_WAIT_S: '3' },
       });
 
-    const started = Date.now();
-    const blocked = migrate();
-    expect(blocked.status, blocked.stderr).not.toBe(0);
-    expect(`${blocked.stdout}${blocked.stderr}`).toMatch(new RegExp(`lock.*held by pid ${holderPid}`));
-    expect(Date.now() - started).toBeLessThan(60_000);
-
-    holder.stdin.write('release\n');
-    await new Promise((resolve) => holder.on('exit', resolve));
+    try {
+      const started = Date.now();
+      const blocked = migrate();
+      expect(blocked.status, blocked.stderr).not.toBe(0);
+      expect(`${blocked.stdout}${blocked.stderr}`).toMatch(new RegExp(`lock.*held by pid ${holderPid}`));
+      expect(Date.now() - started).toBeLessThan(60_000);
+    } finally {
+      // Released even when an assertion above fails, so no later case waits on the lock.
+      holder.stdin.write('release\n');
+      await new Promise((resolve) => holder.on('exit', resolve));
+    }
     const applied = migrate();
     expect(applied.status, `${applied.stdout}${applied.stderr}`).toBe(0);
     expect(applied.stdout).toMatch(/\[migrate\] done/);
