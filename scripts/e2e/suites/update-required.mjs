@@ -1,4 +1,4 @@
-/* global window -- page.evaluate callbacks run inside the app window */
+/* global window, document, getComputedStyle -- page.evaluate and waitForFunction callbacks run inside the app window */
 /**
  * Live check of the version handshake (devstation-mg6u.2), driven through the
  * real app: the main process reads <CHORD_CLOUD_API_URL>/health and compares
@@ -41,6 +41,39 @@ const shot = (name) =>
   join(SHOTS, `update-required-${String(++shotCount).padStart(2, '0')}-${name}.png`);
 
 const results = [];
+/**
+ * Waits until no finite animation is running (the sign-in wordmark draws in over
+ * a second or more), so a screenshot shows the settled screen, not a frame of
+ * the transition. Infinite animations (spinners) are ignored.
+ */
+async function settle(page) {
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
+    null,
+    { timeout: 15_000 }
+  );
+}
+
+/**
+ * Waits for the sign-in screen to finish its boot sequence: the Sign in button
+ * fully opaque (Playwright counts an opacity-0 element as visible, and the
+ * sequence's phases are timers, so no animation runs between them), then settled.
+ */
+async function signInShown(page) {
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('button')].some(
+        (b) => b.textContent?.trim() === 'Sign in' && getComputedStyle(b).opacity === '1'
+      ),
+    null,
+    { timeout: 30_000 }
+  );
+  await settle(page);
+}
+
 function verdict(name, ok, detail) {
   results.push({ name, ok, detail });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} — ${detail}`);
@@ -126,7 +159,7 @@ async function withApp(minimum, profilePrefix, check) {
 async function main() {
   await withApp('99.0.0', 'chord-update-required', async ({ page, rpc, quit, hits }) => {
     await page.getByRole('heading', { name: 'Update required' }).waitFor({ timeout: 60_000 });
-    await page.waitForTimeout(400);
+    await settle(page);
     await page.screenshot({ path: shot('blocked') });
     const text = await page.locator('main').innerText();
     verdict(
@@ -179,7 +212,7 @@ async function main() {
   // The equality boundary: the minimum is exactly this app's version.
   await withApp(APP_VERSION, 'chord-update-supported', async ({ page, rpc }) => {
     await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
-    await page.waitForTimeout(400);
+    await signInShown(page);
     await page.screenshot({ path: shot('supported') });
     const state = await rpc('app.getDesktopCompatibility');
     verdict(
@@ -197,7 +230,7 @@ async function main() {
   // No server: unknown never blocks, and the placeholder gives way to sign-in.
   await withApp(null, 'chord-update-server-down', async ({ page, rpc }) => {
     await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
-    await page.waitForTimeout(400);
+    await signInShown(page);
     await page.screenshot({ path: shot('server-down') });
     const state = await rpc('app.getDesktopCompatibility');
     verdict(
