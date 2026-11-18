@@ -14,11 +14,15 @@ if (process.platform !== 'darwin') {
 const { values } = parseArgs({
   options: {
     'expected-team-id': { type: 'string' },
+    // Builds are unsigned until signing is provisioned (D8): the arch checks run, the
+    // signature checks are skipped, saying so.
+    unsigned: { type: 'boolean', default: false },
   },
   strict: true,
 });
 
 const expectedTeamId = values['expected-team-id'];
+if (values.unsigned && expectedTeamId) fail('--unsigned and --expected-team-id contradict');
 
 const appBundles = readdirSync(RELEASE_DIR)
   .filter((d) => d.startsWith('mac'))
@@ -76,7 +80,11 @@ for (const appDir of appBundles) {
     info(`CFBundleIdentifier: ${bid}`);
   }
 
-  exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
+  if (values.unsigned) {
+    warn(`UNSIGNED (D8): skipped the codesign checks of ${appDir}`);
+  } else {
+    exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
+  }
 
   if (expectedTeamId) {
     const meta = exec(`codesign -dv --verbose=4 "${appDir}" 2>&1`);

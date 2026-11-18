@@ -5,11 +5,15 @@ import { defineConfig } from 'electron-vite';
 import { artifactRuntimePlugin } from './scripts/artifact-runtime/artifact-runtime-plugin.mjs';
 import { pageTokenSheetPlugin } from './scripts/artifact-runtime/page-tokens-plugin.mjs';
 import { chordMcpShimPlugin } from './scripts/chord-mcp/chord-mcp-shim-plugin.mjs';
+import { readPackagedEnv } from './scripts/release/lib/build-env';
 
 export default defineConfig({
   main: {
     root: 'src/main',
     envDir: resolve('.'),
+    // A release build's sign-in and cloud addresses (src/main/app/packaged-env.ts); empty
+    // outside one, and a release build missing one fails here.
+    define: { __CHORD_PACKAGED_ENV__: JSON.stringify(readPackagedEnv(process.env)) },
     plugins: [pageTokenSheetPlugin(), artifactRuntimePlugin(), chordMcpShimPlugin()],
     resolve: {
       alias: {

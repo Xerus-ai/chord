@@ -86,7 +86,8 @@
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.0.0",
     "vite": "^6.4.1",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "yaml": "^2.8.2"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
