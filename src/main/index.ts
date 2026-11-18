@@ -17,6 +17,7 @@ import { providerTokenRegistry } from './core/account/provider-token-registry';
 import { chordAccountService } from './core/account/services/chord-account-service';
 import { registerProtocolHandler } from './core/account/services/workos-auth-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
+import { desktopCompatibilityService } from './core/app/desktop-compatibility-service';
 import { appService } from './core/app/service';
 import { setupArtifactPageProtocol } from './core/artifact-pages/artifact-page-protocol';
 import { configureArtifactRuntimeDir } from './core/artifact-pages/artifact-runtime-dir';
@@ -161,6 +162,7 @@ void app.whenReady().then(async () => {
   // A new item's room is joined once the cloud has it, not on the next sweep.
   onWorkItemCloudCreated((workItemId) => deviceSocketService.joinWorkItemRoom(workItemId));
   appService.initialize();
+  desktopCompatibilityService.initialize();
   await appSettingsService.initialize();
 
   agentHookService.initialize().catch((e) => {
@@ -251,6 +253,7 @@ app.on('before-quit', (event) => {
   syncQueueService.dispose();
   gitStateCaptureService.dispose();
   deviceSocketService.dispose();
+  desktopCompatibilityService.dispose();
   commandInboxService.dispose();
   void gitWatcherRegistry.dispose();
   projectManager.dispose().catch((e) => {

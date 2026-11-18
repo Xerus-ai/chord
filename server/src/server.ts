@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { MIN_DESKTOP_VERSION } from '@chord/protocol';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { handlePolarWebhook } from './billing/polar-webhook.js';
@@ -108,6 +109,8 @@ export function createApp(connectionManager: ConnectionManager) {
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: '0.1.0',
+      // The version handshake (devstation-mg6u.2): desktops below this are told to update.
+      min_desktop_version: MIN_DESKTOP_VERSION,
     });
   });
 

@@ -7,6 +7,7 @@ import {
   type WindowChromeTheme,
 } from '@main/app/window';
 import { capture } from '@main/lib/telemetry';
+import { desktopCompatibilityService } from './desktop-compatibility-service';
 import { appService } from './service';
 
 export const appController = createRPCController({
@@ -60,6 +61,7 @@ export const appController = createRPCController({
     issues: CHORD_ISSUES_URL,
   }),
   getAppVersion: () => appService.getCachedAppVersion(),
+  getDesktopCompatibility: () => desktopCompatibilityService.getState(),
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
   isWindowFullScreen: () => isMainWindowFullScreen(),
