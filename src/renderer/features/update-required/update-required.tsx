@@ -48,7 +48,7 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
     <main className="flex h-screen flex-col items-center justify-center gap-4 overflow-y-auto bg-surface p-6">
       <div className="flex max-w-[320px] flex-col items-center gap-1.5 text-center">
         <h1 className="text-title tracking-title font-semibold text-text">Update required</h1>
-        <p className="text-body tracking-body text-text-muted">
+        <p className="text-body tracking-body text-balance text-text-muted">
           This version of Chord ({current}) is no longer supported by the sync server. Version{' '}
           {minimum} or newer is required.
         </p>
@@ -67,7 +67,8 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
         <Button size="lg" disabled={primary === null} onClick={() => void primary?.run()}>
           {primary?.label ?? busyLabel(state)}
         </Button>
-        <Button size="lg" variant="ghost" onClick={() => void openLatest()}>
+        {/* outline, not ghost: on the light surface a fill-less button read as text (mg6u.5) */}
+        <Button size="lg" variant="outline" onClick={() => void openLatest()}>
           Download from the website (closes Chord)
         </Button>
       </div>

@@ -1,6 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { readFileSync } from 'node:fs';
 import { compareVersions, MIN_DESKTOP_VERSION, ServerHealthSchema } from '@chord/protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 

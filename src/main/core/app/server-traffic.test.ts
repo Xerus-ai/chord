@@ -55,6 +55,8 @@ let upgrades = 0;
 const openSockets = new Set<Socket>();
 /** Set to hold POST /work-items answers until released (the mid-drain case). */
 let holdCreates: Promise<void> | null = null;
+/** Ids the stand-in holds, listed back as the real server does (creator-scoped GET). */
+const cloudIds: string[] = [];
 let server: Server;
 let base = '';
 const originalApiUrl = process.env.CHORD_CLOUD_API_URL;
@@ -102,11 +104,22 @@ function startServer(): Promise<string> {
           return reply(200, { status: 'ok', min_desktop_version: minimum });
         }
         if (req.url === '/auth/sync-profile') return reply(200, { org_id: ORG_ID });
-        if (req.url === '/work-items' && req.method === 'GET') return reply(200, []);
+        if (req.url === '/work-items' && req.method === 'GET') {
+          return reply(
+            200,
+            cloudIds.map((id) => ({
+              id,
+              repo_name: null,
+              branch_name: null,
+              general_access: 'invited',
+            }))
+          );
+        }
         if (req.url === '/work-items/member-summary') return reply(200, []);
         if (req.url === '/work-items' && req.method === 'POST') {
           if (holdCreates) await holdCreates;
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as { id: string };
+          cloudIds.push(body.id);
           return reply(201, { id: body.id, version_number: 1 });
         }
         if (req.url === '/commands/fetch') return reply(200, []);
@@ -200,14 +213,20 @@ describe('server traffic follows the version verdict', () => {
 
     // Work done while turned away still lands locally.
     syncQueueService.enqueueDelete(X);
-    await db.insert(workItems).values({ id: Z, name: 'Z', repoId: 'r-traffic', repoPath: '/tmp/traffic' });
+    await db
+      .insert(workItems)
+      .values({ id: Z, name: 'Z', repoId: 'r-traffic', repoPath: '/tmp/traffic' });
     await knockOnEveryDoor();
     // Longer than the socket's first backoff (2 s) and the inbox kick (0.5 s).
     await sleep(3_000);
 
     expect(traffic()).toEqual([]);
     expect(upgrades).toBe(upgradesBefore);
-    expect(queueRows().filter((r) => r.status === 'pending').map((r) => r.entityId)).toEqual([X]);
+    expect(
+      queueRows()
+        .filter((r) => r.status === 'pending')
+        .map((r) => r.entityId)
+    ).toEqual([X]);
   });
 
   it('a failed re-check keeps it closed; the next supported verdict resumes everything', async () => {

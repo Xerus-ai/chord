@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
+import { serverTraffic } from '@main/core/app/server-traffic';
 import { db } from '@main/db/client';
 import { syncQueue } from '@main/db/schema-sync';
 import { workItems } from '@main/db/schema-work-items';
@@ -79,7 +80,8 @@ export class GitStateCaptureService implements IInitializable, IDisposable {
   }
 
   private async tick(): Promise<void> {
-    if (this.running) return;
+    // Turned away by the version handshake: no polling either (mg6u.5).
+    if (this.running || !serverTraffic.isOpen()) return;
     this.running = true;
     try {
       const session = await chordAccountService.getSession();

@@ -99,7 +99,9 @@ describe('version handshake', () => {
     for (const s of states) expect(s.state).toBe('unknown');
     expect(states[1]).toMatchObject({ reason: expect.stringContaining('503') });
     // The parse error itself, not just "not JSON" (mg6u.2 verifier P3).
-    expect(states[2]).toMatchObject({ reason: expect.stringMatching(/Unexpected token|not valid JSON/) });
+    expect(states[2]).toMatchObject({
+      reason: expect.stringMatching(/Unexpected token|not valid JSON/),
+    });
   });
 
   // devstation-mg6u.5: new URL('/health', base) dropped a path prefix in the base.

@@ -60,7 +60,11 @@ function comparePre(a: string[], b: string[]): number {
   return 0;
 }
 
-/** Semver precedence: negative when a < b, 0 when equal, positive when a > b. */
+/**
+ * Semver precedence: negative when a < b, 0 when equal, positive when a > b.
+ * For the app's own version (prereleases included). Agent CLI versions use the
+ * plain X.Y.Z compareVersions in src/main/core/dependencies/version-compare.ts.
+ */
 export function compareVersions(a: string, b: string): number {
   const pa = parse(a);
   const pb = parse(b);
