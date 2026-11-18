@@ -151,8 +151,15 @@ export class DesktopCompatibilityMonitor {
 
   private async checkAndSchedule(): Promise<void> {
     const first = this.state.state === 'unknown' && !this.state.checked;
-    const reading = await this.check();
-    if (reading.state === 'unknown') log.info(`desktop compatibility not read: ${reading.reason}`);
+    let reading: DesktopCompatibility | null = null;
+    try {
+      reading = await this.check();
+      if (reading.state === 'unknown')
+        log.info(`desktop compatibility not read: ${reading.reason}`);
+    } catch (error) {
+      // A listener that throws must not end the schedule: the next check still runs.
+      log.error('desktop compatibility check failed', { error: String(error) });
+    }
     if (!this.running) return;
     const { regular, paused } = this.options.intervals;
     // A first reading that failed may only have hit its short timeout (a cold
@@ -160,7 +167,7 @@ export class DesktopCompatibilityMonitor {
     // the full timeout, so an app below the minimum is turned away seconds
     // after the window opens rather than one paused interval later.
     const wait =
-      first && reading.state === 'unknown'
+      first && reading?.state !== 'supported' && reading?.state !== 'update_required'
         ? 0
         : this.state.state === 'supported'
           ? regular

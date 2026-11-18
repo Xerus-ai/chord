@@ -301,6 +301,32 @@ describe('version handshake', () => {
     }
   }, 15_000);
 
+  // A listener that throws must not end the schedule, or an app turned away
+  // could stay paused for good.
+  it('a started monitor keeps checking after a listener throws', async () => {
+    let calls = 0;
+    const monitor = new DesktopCompatibilityMonitor({
+      baseUrl: base,
+      currentVersion: async () => '1.0.0',
+      onChange: () => {},
+      onVerdict: () => {
+        calls += 1;
+        if (calls === 1) throw new Error('listener failed');
+      },
+      intervals: { regular: 100, paused: 100 },
+    });
+    body = { status: 'ok', min_desktop_version: '0.1.0' };
+    monitor.start();
+    try {
+      await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(3), {
+        timeout: 2_000,
+        interval: 20,
+      });
+    } finally {
+      monitor.stop();
+    }
+  });
+
   // A first reading that failed (a slow boot or network) let the app through
   // unjudged: it is asked again on the short interval too.
   it('a started monitor that has not read the server re-checks on the short interval', async () => {

@@ -22,7 +22,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
  * reconnects itself after being closed; a verdict mid-drain, or between a
  * row's claim and its send, that still sends or spends a retry; a resume that
  * skips the reconcile a sign-in during the pause needed; a stopped sender that
- * still wakes when traffic reopens.
+ * still wakes when traffic reopens; boot's first opening taken for a resume
+ * (which would hide a stalled sync for 15 minutes after every launch).
  */
 vi.mock('electron', async () => {
   const { electronWithTestKeychain } = await import('@main/core/account/_testing/test-keychain');
@@ -44,6 +45,7 @@ const { gitStateCaptureService } = await import('@main/core/work-items/git-state
 const { processSyncRow } = await import('@main/core/work-items/sync-queue-process-row');
 const { sendSyncOperation } = await import('@main/core/work-items/sync-queue-send');
 const { insertWorkItemDeleteRow } = await import('@main/core/work-items/sync-queue-writes');
+const { syncQueueHealth } = await import('@main/core/work-items/sync-queue-health');
 const { DesktopCompatibilityMonitor } = await import('./desktop-compatibility');
 const { serverTraffic } = await import('./server-traffic');
 const { startServerSenders, stopServerSenders } = await import('./start-server-senders');
@@ -230,6 +232,8 @@ describe('server traffic follows the version verdict', () => {
       { timeout: 10_000, interval: 100 }
     );
     expect(pending(X, Y)).toEqual([]);
+    // Boot's first opening is not a resume from a pause.
+    expect((await syncQueueHealth.getHealth()).resumedAt).toBeNull();
 
     // update_required: the socket closes and every sender stops.
     expect(await verdict('2.0.0')).toBe('update_required');
@@ -268,6 +272,8 @@ describe('server traffic follows the version verdict', () => {
       { timeout: 10_000, interval: 100 }
     );
     expect(pending(X, Z)).toEqual([]);
+    // Reopening after the pause restarts the sync badge's staleness clock.
+    expect((await syncQueueHealth.getHealth()).resumedAt).not.toBeNull();
   });
 
   it('a verdict mid-drain sends no further row and spends no retry on the held one', async () => {
@@ -338,6 +344,20 @@ describe('server traffic follows the version verdict', () => {
       timeout: 5_000,
       interval: 50,
     });
+    // Rows earlier cases left are drained first: a drain cycle still in flight
+    // when the senders stop would legitimately send V once traffic reopens.
+    await vi.waitFor(
+      () =>
+        expect(
+          db
+            .select()
+            .from(syncQueue)
+            .all()
+            .filter((r) => r.status !== 'failed')
+        ).toEqual([]),
+      { timeout: 10_000, interval: 50 }
+    );
+    await sleep(1_000);
     expect(await verdict('2.0.0')).toBe('update_required');
     stopServerSenders();
     // Queued without a kick: only a resume that still reaches the stopped

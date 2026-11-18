@@ -73,9 +73,16 @@ export class SyncQueueService implements IInitializable, IDisposable {
   );
 
   initialize(): void {
+    // Boot's first opening (held -> open) is no resume: only an opening after
+    // a pause restarts the staleness clock.
+    let paused = false;
     this.unsubscribeTraffic = serverTraffic.subscribe((open) => {
-      if (!open) return;
-      syncQueueHealth.recordResume(nowSeconds());
+      if (!open) {
+        paused = true;
+        return;
+      }
+      if (paused) syncQueueHealth.recordResume(nowSeconds());
+      paused = false;
       void this.owed.runOwed();
     });
     this.resetInterruptedOperations();

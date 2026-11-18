@@ -7,21 +7,20 @@ export interface SyncBacklogHealth {
   pendingCount: number;
   lastSuccessfulDrainAt: number | null;
   orgUnresolved: boolean;
-  pausedForVersion: boolean;
   resumedAt: number | null;
 }
 
 /** Why queued operations are not going out, or null when nothing needs saying. */
-export type SyncBacklog = 'paused-for-version' | 'org-unresolved' | 'stalled' | null;
+export type SyncBacklog = 'org-unresolved' | 'stalled' | null;
 
 /**
- * A pause for a version update is named as such; staleness counts from the
- * later of the last drain and the last resume, so the time spent paused is
- * never read as a stalled drain once traffic reopens.
+ * Staleness counts from the later of the last drain and the last resume after
+ * a version pause, so the time spent paused (when the update screen replaces
+ * the app, badge included) is never read as a stalled drain once traffic
+ * reopens.
  */
 export function syncBacklog(health: SyncBacklogHealth, nowSeconds: number): SyncBacklog {
   if (health.pendingCount === 0) return null;
-  if (health.pausedForVersion) return 'paused-for-version';
   const progressAt = Math.max(health.lastSuccessfulDrainAt ?? 0, health.resumedAt ?? 0);
   const neverRan = health.lastSuccessfulDrainAt === null && health.resumedAt === null;
   if (!neverRan && nowSeconds - progressAt < STALE_DRAIN_SECONDS) return null;

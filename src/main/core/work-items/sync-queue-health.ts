@@ -1,5 +1,4 @@
 import { count, eq, min } from 'drizzle-orm';
-import { serverTraffic } from '@main/core/app/server-traffic';
 import { db } from '@main/db/client';
 import { KV } from '@main/db/kv';
 import { syncQueue } from '@main/db/schema-sync';
@@ -22,8 +21,6 @@ export interface SyncQueueHealth {
   lastSuccessfulDrainAt: number | null;
   /** True while org resolution answers "no org" — work-item creates are held. */
   orgUnresolved: boolean;
-  /** True while the sync server has turned this version away: nothing drains. */
-  pausedForVersion: boolean;
   /**
    * Unix seconds of the last time traffic reopened after a pause, null if it
    * never paused in this process: staleness counts from the later of this and
@@ -68,7 +65,6 @@ class SyncQueueHealthTracker {
       oldestPendingAt: agg?.oldest ?? null,
       lastSuccessfulDrainAt: (await syncHealthKV.get('lastSuccessfulDrainAt')) ?? null,
       orgUnresolved: this.orgUnresolved,
-      pausedForVersion: !serverTraffic.isOpen(),
       resumedAt: this.resumedAt,
     };
   }

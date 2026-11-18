@@ -1,5 +1,4 @@
 import { and, eq } from 'drizzle-orm';
-import { ServerTrafficPausedError } from '@main/core/app/server-traffic';
 import { db } from '@main/db/client';
 import { syncQueue, type SyncQueueRow } from '@main/db/schema-sync';
 import { log } from '@main/lib/logger';
@@ -56,13 +55,6 @@ export async function processSyncRow(
   try {
     result = await send(row);
   } catch (error) {
-    // The version gate closed between the claim and the send: nothing reached
-    // the server, so the row was not attempted. Back to pending, retry unspent.
-    if (error instanceof ServerTrafficPausedError) {
-      db.update(syncQueue).set({ status: 'pending' }).where(eq(syncQueue.id, row.id)).run();
-      log.info('[sync-queue] send held: server traffic paused', { id: row.id });
-      return { proceed: false, delivered: false };
-    }
     // A row that can never succeed — an unsupported operation, or a payload
     // this client serialized wrong so JSON.parse throws — must fail-out,
     // bounded and surfaced, NOT revert to pending. A bare revert leaves
@@ -88,8 +80,9 @@ export async function processSyncRow(
       return { proceed: true, delivered: false };
     }
 
-    // Transient network/timeout failure: revert without consuming a retry and
-    // stop the cycle so the whole batch is retried once connectivity returns.
+    // Transient network/timeout failure, or the version gate closed between the
+    // claim and the send (cloudFetch refuses before any request): revert without
+    // consuming a retry and stop the cycle so the batch is retried later.
     db.update(syncQueue).set({ status: 'pending' }).where(eq(syncQueue.id, row.id)).run();
     log.warn('[sync-queue] transient send failure, deferring batch', {
       id: row.id,

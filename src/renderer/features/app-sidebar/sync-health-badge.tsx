@@ -95,11 +95,9 @@ export function SyncHealthBadge() {
       {backlog !== null && health && (
         <span
           title={
-            backlog === 'paused-for-version'
-              ? `${operations(health.pendingCount)} queued. Sync is paused until Chord is updated.`
-              : backlog === 'org-unresolved'
-                ? `${operations(health.pendingCount)} queued. Sync is blocked: no workspace could be resolved for this account.`
-                : `${operations(health.pendingCount)} queued${queuedSince ? ` since ${queuedSince}` : ''}. Sync has not made progress recently.`
+            backlog === 'org-unresolved'
+              ? `${operations(health.pendingCount)} queued. Sync is blocked: no workspace could be resolved for this account.`
+              : `${operations(health.pendingCount)} queued${queuedSince ? ` since ${queuedSince}` : ''}. Sync has not made progress recently.`
           }
           className="flex h-[22px] shrink-0 items-center gap-1 rounded-md bg-status-warn/15 px-2 text-tiny tracking-tiny font-medium text-status-warn"
         >
