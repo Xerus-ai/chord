@@ -41,6 +41,7 @@ const { gitStateCaptureService } = await import('@main/core/work-items/git-state
 const { commandInboxService } = await import('@main/core/commands/command-inbox-service');
 const { deviceSocketService } = await import('@main/core/commands/device-socket-service');
 const { DesktopCompatibilityMonitor } = await import('./desktop-compatibility');
+const { serverTraffic } = await import('./server-traffic');
 
 const ORG_ID = 'org-traffic';
 const X = '66666666-6666-4666-8666-666666666666';
@@ -186,6 +187,8 @@ afterAll(async () => {
 
 describe('server traffic follows the version verdict', () => {
   it('sends nothing before the first verdict', async () => {
+    // As src/main/index.ts does before it starts the senders.
+    serverTraffic.hold();
     await knockOnEveryDoor();
     await sleep(1_500);
     expect(traffic()).toEqual([]);

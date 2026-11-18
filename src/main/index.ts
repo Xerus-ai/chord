@@ -18,6 +18,7 @@ import { chordAccountService } from './core/account/services/chord-account-servi
 import { registerProtocolHandler } from './core/account/services/workos-auth-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { desktopCompatibilityService } from './core/app/desktop-compatibility-service';
+import { serverTraffic } from './core/app/server-traffic';
 import { appService } from './core/app/service';
 import { setupArtifactPageProtocol } from './core/artifact-pages/artifact-page-protocol';
 import { configureArtifactRuntimeDir } from './core/artifact-pages/artifact-runtime-dir';
@@ -151,6 +152,9 @@ void app.whenReady().then(async () => {
     log.warn('telemetry init failed:', e);
   }
 
+  // Nothing reaches the sync server before it has judged this version
+  // (devstation-mg6u.5): desktopCompatibilityService's first reading releases it.
+  serverTraffic.hold();
   gitWatcherRegistry.initialize();
   prSyncScheduler.initialize();
   syncQueueService.initialize();

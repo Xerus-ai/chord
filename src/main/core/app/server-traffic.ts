@@ -7,8 +7,9 @@ import { log } from '@main/lib/logger';
  * older desktops, so an app turned away (update_required) must stop sending,
  * not only hide its window behind the update screen.
  *
- *   awaiting  boot, before the first completed reading: nothing is sent yet
- *   open      supported, or unknown (a failed read never blocks)
+ *   awaiting  from hold() (the app's boot, before its senders start) until the
+ *             first completed reading: nothing is sent yet
+ *   open      the default; supported, or unknown (a failed read never blocks)
  *   paused    update_required; a later failed read keeps it paused
  *
  * The senders (sync queue, device socket, command inbox, git-state capture)
@@ -18,11 +19,20 @@ import { log } from '@main/lib/logger';
 type Gate = 'awaiting' | 'open' | 'paused';
 
 class ServerTraffic {
-  private gate: Gate = 'awaiting';
+  private gate: Gate = 'open';
   private readonly listeners = new Set<(open: boolean) => void>();
 
   isOpen(): boolean {
     return this.gate === 'open';
+  }
+
+  /**
+   * Boot: send nothing until the first completed reading. Called once by
+   * src/main/index.ts before the senders start; code with no version check
+   * (scripts, tests of a sender) keeps the default, open.
+   */
+  hold(): void {
+    if (this.gate === 'open') this.gate = 'awaiting';
   }
 
   apply(state: DesktopCompatibility): void {
