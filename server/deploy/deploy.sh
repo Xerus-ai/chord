@@ -109,6 +109,7 @@ write_release_env() {
   mv -f "$shared/release.env.tmp" "$shared/release.env"
 }
 
+# shellcheck disable=SC2329 # called through run_step
 prepare_release() {
   ln -sfn "$shared/.env" server/.env
   mkdir -p server/data
@@ -117,6 +118,7 @@ prepare_release() {
   pnpm --filter @chord/sync-server run build
 }
 
+# shellcheck disable=SC2329 # called through run_step
 migrate_release() {
   # --status stops before any change when the database is ahead of this
   # release, a shipped migration was edited, or one is out of order.
@@ -136,12 +138,14 @@ run_step() {
 prune() {
   local live d n=0
   live=$(basename "$(live_path)")
-  for d in $(ls -1t "$releases"); do
+  # Newest first by the time deploy.sh touched each release; skips .<tag>.tmp.
+  while IFS= read -r d; do
     n=$((n + 1))
     if [ "$n" -gt "$KEEP" ] && [ "$d" != "$live" ]; then
       rm -rf "${releases:?}/$d"
     fi
-  done
+  done < <(find "$releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %f\n' |
+    sort -rn | cut -d' ' -f2-)
 }
 
 prev=$(live_path)
