@@ -166,6 +166,13 @@ describe('migration lint', () => {
     expect(lint("DO $$ BEGIN EXECUTE E'DROP TABLE t'; END $$;")).toHaveLength(1);
     expect(lint("DO $$ BEGIN EXECUTE ('DROP TABLE t'); END $$;")).toHaveLength(1);
     expect(lint("DO $$ BEGIN EXECUTE 'SELECT 1'; END $$;")).toEqual([]);
+    // A trigger's EXECUTE FUNCTION / PROCEDURE names a function; it is not dynamic SQL.
+    expect(
+      lint('CREATE TRIGGER t_touch BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION touch();')
+    ).toEqual([]);
+    expect(
+      lint('CREATE TRIGGER t_touch BEFORE UPDATE ON t FOR EACH ROW EXECUTE PROCEDURE touch();')
+    ).toEqual([]);
     expect(lint('DROP INDEX IF EXISTS a_b_idx;')).toHaveLength(1);
 
     expect(lint("DO $$ BEGIN EXECUTE 'ALTER TABLE a DROP COLUMN b'; END $$;")).toHaveLength(1);
