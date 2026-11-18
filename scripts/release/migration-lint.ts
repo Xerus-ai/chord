@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fail, info } from './lib/log.ts';
-import { lintMigrations, MIGRATION_LINT_BASELINE } from './lib/migration-lint.ts';
+import { lintMigrations, MIGRATION_LINT_BASELINE, releasedTagsAt } from './lib/migration-lint.ts';
 
 /**
  * Release preflight's migration lint (design C5, F8; devstation-5s42): a migration
@@ -23,14 +23,14 @@ const { values } = parseArgs({
 });
 
 const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-const releasedTags = git('tag', '--list', 'v*').split('\n').filter(Boolean);
+const allTags = git('tag', '--list', 'v*').split('\n').filter(Boolean);
 
 const names = readdirSync(DIR)
   .filter((n) => /^\d{4}_[a-z0-9_]+\.sql$/.test(n))
   .sort();
 let after = MIGRATION_LINT_BASELINE;
 if (values.since) {
-  if (!releasedTags.includes(values.since)) fail(`--since ${values.since} is not a release tag`);
+  if (!allTags.includes(values.since)) fail(`--since ${values.since} is not a release tag`);
   const shipped = git('ls-tree', '--name-only', `${values.since}:${DIR}`)
     .split('\n')
     .filter((n) => /^\d{4}_/.test(n))
@@ -40,7 +40,8 @@ if (values.since) {
 
 const findings = lintMigrations(
   names.map((name) => ({ name, sql: readFileSync(join(DIR, name), 'utf8') })),
-  { releasedTags, after }
+  // With --since, only tags the previous release already had: a later tag cannot vouch for it.
+  { releasedTags: values.since ? releasedTagsAt(values.since, git) : allTags, after }
 );
 for (const f of findings) info(`FAIL  ${f.file}: ${f.reason}\n        ${f.statement}`);
 if (findings.length) fail(`${findings.length} migration statement(s) would break the live release`);

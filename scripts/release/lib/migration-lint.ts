@@ -5,8 +5,11 @@
  * back to it when the new one is unhealthy (server/deploy/deploy.sh). So every
  * migration must leave a schema the previous release still works against:
  * expand/contract. A file that drops a table or column, renames a column,
- * changes a column's type, or adds a NOT NULL column without a DEFAULT is the
- * contract half, and ships only with a header naming the released tag that
+ * changes a column's type, adds a NOT NULL column without a DEFAULT, adds a
+ * UNIQUE/CHECK/FOREIGN KEY constraint or a unique index (the previous release
+ * can write rows it rejects), or drops a constraint or an index (its ON CONFLICT
+ * may need the key) is the contract half, DDL that EXECUTE runs from a string
+ * included, and ships only with a header naming the released tag that
  * already stopped using what it removes:
  *
  *   -- contract-for: v1.4.0
@@ -52,6 +55,9 @@ export function contractFor(sql: string): string | null {
  * kept as SQL: DDL inside them still runs, and destructiveStatement finds it
  * anywhere in a statement, not only at its start.
  */
+/** A literal that EXECUTE (or EXECUTE format(...)) runs: its text is SQL that still runs. */
+const EXECUTED_LITERAL = /\bEXECUTE\s*(?:format\s*\(\s*)?$/i;
+
 function stripCommentsAndStrings(sql: string): string {
   let out = '';
   let i = 0;
@@ -65,14 +71,17 @@ function stripCommentsAndStrings(sql: string): string {
       i = end === -1 ? sql.length : end + 2;
       out += ' ';
     } else if (c === "'" || c === '"') {
+      const start = i + 1;
       i++;
       while (i < sql.length) {
         if (sql[i] === c && sql[i + 1] === c) i += 2;
         else if (sql[i] === c) break;
         else i++;
       }
+      const body = sql.slice(start, i);
       i++;
-      out += c === "'" ? "''" : '"q"';
+      if (c === "'" && EXECUTED_LITERAL.test(out)) out += ` ${body.replace(/''/g, "'")} `;
+      else out += c === "'" ? "''" : '"q"';
     } else if (c === '$') {
       const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
       if (tag) {
@@ -120,7 +129,12 @@ const ALTER_COLUMN_DROP_DEFAULT = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+DRO
 /** Why one ALTER TABLE action breaks the previous release, or null. */
 function destructiveAction(action: string): string | null {
   const a = action.toUpperCase();
-  if (/^DROP\s+CONSTRAINT\b/.test(a)) return null;
+  if (/^DROP\s+CONSTRAINT\b/.test(a)) {
+    return "drops a constraint (the previous release's ON CONFLICT may need its key)";
+  }
+  if (/^ADD\s+(?:CONSTRAINT\s+\S+\s+)?(?:UNIQUE|CHECK|FOREIGN\s+KEY)\b/.test(a)) {
+    return "adds a constraint the previous release's writes may violate";
+  }
   if (/^DROP\b/.test(a)) return 'drops a column';
   if (/^RENAME\s+TO\b/.test(a)) return 'renames a table';
   if (/^RENAME\s+(?!CONSTRAINT\b)/.test(a)) return 'renames a column';
@@ -141,6 +155,12 @@ function destructiveStatement(statement: string): string | null {
   const drop = DROP_OBJECT.exec(statement);
   if (drop) return `drops a ${drop[1].toLowerCase().replace(/\s+/g, ' ')}`;
   if (/\bTRUNCATE\b/i.test(statement)) return 'truncates a table';
+  if (/\bDROP\s+INDEX\b/i.test(statement)) {
+    return "drops an index (the previous release's ON CONFLICT may need it)";
+  }
+  if (/\bCREATE\s+UNIQUE\s+INDEX\b/i.test(statement)) {
+    return "adds a unique index the previous release's writes may violate";
+  }
   if (/\bALTER\s+TYPE\s+\S+\s+RENAME\s+VALUE\b/i.test(statement)) return 'renames an enum value';
   const alter = ALTER_TABLE.exec(statement);
   if (!alter) return null;
@@ -188,4 +208,13 @@ export function lintMigrations(
     }
   }
   return findings;
+}
+
+/**
+ * The tags a contract-for header may name when linting the files since `since`:
+ * the release tags in its history, so a tag cut after the previous release does
+ * not vouch for it.
+ */
+export function releasedTagsAt(since: string, git: (...args: string[]) => string): string[] {
+  return git('tag', '--merged', since, '--list', 'v*').split('\n').filter(Boolean);
 }
