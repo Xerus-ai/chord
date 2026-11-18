@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDesktopCompatibility } from '@renderer/features/update-required/use-desktop-compatibility';
 import { rpc } from '@renderer/lib/ipc';
 import { FOCUS_RING } from '@renderer/lib/ui/focus-ring';
 import { cn } from '@renderer/utils/utils';
@@ -87,6 +88,10 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const phase = useBootPhase();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A launch that could not read the sync server still reaches sign-in (a
+  // failed read never blocks); this says why sign-in may not work.
+  const { data: compatibility } = useDesktopCompatibility();
+  const serverUnreachable = compatibility?.state === 'unknown' && compatibility.checked;
   const { data: publicUrls } = useQuery({
     queryKey: ['app', 'publicUrls'],
     queryFn: () => rpc.app.getPublicUrls(),
@@ -220,6 +225,15 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
               {error && (
                 <p className="mt-4 max-w-[320px] text-tiny tracking-tiny text-status-err">
                   {error}
+                </p>
+              )}
+              {serverUnreachable && !error && (
+                <p
+                  role="status"
+                  className="mt-4 max-w-[320px] text-tiny tracking-tiny text-status-warn"
+                >
+                  Could not reach the Chord sync server. Sign-in and cloud features may not work
+                  until it answers.
                 </p>
               )}
 

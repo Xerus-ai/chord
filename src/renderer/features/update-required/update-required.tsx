@@ -19,6 +19,10 @@ function primaryAction(
     case 'downloading':
     case 'installing':
       return null;
+    case 'not-available':
+    case 'unavailable':
+    case 'error':
+      return { label: 'Check again', run: actions.check };
     default:
       return { label: 'Check for updates', run: actions.check };
   }
@@ -31,10 +35,21 @@ function busyLabel(state: UpdateState): string {
   return 'Checking…';
 }
 
+/** The result of the last check, said in words; null when there is none to say. */
+function outcome(state: UpdateState): string | null {
+  if (state.status === 'not-available') {
+    return 'No update was found automatically. Download the latest version instead.';
+  }
+  if (state.status === 'unavailable') {
+    return 'This build cannot update itself. Download the latest version instead.';
+  }
+  return null;
+}
+
 /**
- * Shown instead of the app when the sync server no longer supports this version
- * (devstation-mg6u.2). It drives the app's own updater; the download page is
- * always offered too, since the updater can be off, find nothing, or fail.
+ * Shown instead of the app when the sync server no longer supports this
+ * version. It drives the app's own updater; the download page is always
+ * offered too, since the updater can be off, find nothing, or fail.
  */
 export function UpdateRequired({ current, minimum }: { current: string; minimum: string }) {
   const state = useUpdateStore((s) => s.state);
@@ -43,10 +58,10 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
   const install = useUpdateStore((s) => s.install);
   const openLatest = useUpdateStore((s) => s.openLatest);
   const primary = primaryAction(state, { check, download, install });
+  const said = outcome(state);
   // Once the updater has nothing to offer, the download is the way forward: it
   // carries the primary style and the check steps back.
-  const downloadFirst = state.status === 'not-available' || state.status === 'error';
-  const notFound = 'No update was found automatically. Download the latest version instead.';
+  const downloadFirst = said !== null || state.status === 'error';
 
   return (
     <main className="flex h-screen flex-col items-center justify-center gap-4 overflow-y-auto bg-surface p-6">
@@ -56,13 +71,17 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
           This version of Chord ({current}) is no longer supported by the sync server. Version{' '}
           {minimum} or newer is required.
         </p>
-        {state.status === 'not-available' && (
-          <p className="mt-2 text-body tracking-body text-balance text-text-muted">{notFound}</p>
-        )}
-        {state.status === 'error' && (
-          <p role="alert" className="mt-2 text-body tracking-body text-balance text-status-err">
-            {state.message}
-          </p>
+        {(said !== null || state.status === 'error') && (
+          <div className="mt-3 w-full border-t border-border pt-3">
+            {said !== null && (
+              <p className="text-body tracking-body text-balance text-text">{said}</p>
+            )}
+            {state.status === 'error' && (
+              <p role="alert" className="text-body tracking-body text-balance text-status-err">
+                {state.message}
+              </p>
+            )}
+          </div>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -74,17 +93,19 @@ export function UpdateRequired({ current, minimum }: { current: string; minimum:
         >
           {primary?.label ?? busyLabel(state)}
         </Button>
-        {/* outline when secondary: a fill-less ghost button reads as text on the light surface */}
         <Button
           size="lg"
           variant={downloadFirst ? 'default' : 'outline'}
           onClick={() => void openLatest()}
         >
-          Download from the website (closes Chord)
+          Download from website
         </Button>
       </div>
+      <p className="text-tiny tracking-tiny text-text-muted">
+        Downloading from the website closes Chord.
+      </p>
       <p aria-live="polite" className="sr-only">
-        {primary === null ? busyLabel(state) : state.status === 'not-available' ? notFound : ''}
+        {primary === null ? busyLabel(state) : (said ?? '')}
       </p>
     </main>
   );

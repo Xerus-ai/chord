@@ -84,6 +84,11 @@ class UpdateService implements IInitializable, IDisposable {
     this.scheduleNextCheck(STARTUP_DELAY_MS);
   }
 
+  /** False in a dev build or before initialize: there is no updater to run a check. */
+  isActive(): boolean {
+    return this.active;
+  }
+
   /** The loaded updater; only an active service (initialized outside dev) has one. */
   private get autoUpdater(): AppUpdater {
     if (!this.updater) throw new Error('Update service is not active');

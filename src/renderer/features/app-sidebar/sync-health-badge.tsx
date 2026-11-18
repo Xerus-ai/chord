@@ -2,14 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudOff, Loader2 } from 'lucide-react';
 import { useAuthState } from '@renderer/lib/hooks/useAccount';
 import { rpc } from '@renderer/lib/ipc';
+import { syncBacklog, type SyncBacklog } from './sync-backlog';
 
 const FAILED_OPS_KEY = ['syncQueue', 'failedOperations'] as const;
 const QUEUE_HEALTH_KEY = ['syncQueue', 'health'] as const;
-
-// A pending backlog is only surfaced once the drain has made no progress for
-// this long (or has never run) — ordinary retry backoff must not flash a
-// banner, but a wedged queue (NEW-6 sat silent for 20 days) must show.
-const STALE_DRAIN_SECONDS = 15 * 60;
 
 /**
  * Sync surfacing: permanently-failed operations (count + one "Retry all"
@@ -57,17 +53,13 @@ export function SyncHealthBadge() {
 
   const failedCount = data?.length ?? 0;
 
-  const drainIsStale =
-    health !== undefined &&
-    health.pendingCount > 0 &&
-    (health.lastSuccessfulDrainAt === null ||
-      health.fetchedAtSeconds - health.lastSuccessfulDrainAt >= STALE_DRAIN_SECONDS);
+  const backlog: SyncBacklog = health ? syncBacklog(health, health.fetchedAtSeconds) : null;
 
   // An expired session is WHY operations are queued — ReauthBadge names the
   // cause and the fix, so repeating the symptom here would say it twice.
   if (authState === 'reauth_required') return null;
 
-  if (failedCount === 0 && !drainIsStale) return null;
+  if (failedCount === 0 && backlog === null) return null;
 
   const queuedSince =
     health?.oldestPendingAt != null
@@ -100,12 +92,14 @@ export function SyncHealthBadge() {
           {failedCount} failed · Retry
         </button>
       )}
-      {drainIsStale && health && (
+      {backlog !== null && health && (
         <span
           title={
-            health.orgUnresolved
-              ? `${operations(health.pendingCount)} queued. Sync is blocked: no workspace could be resolved for this account.`
-              : `${operations(health.pendingCount)} queued${queuedSince ? ` since ${queuedSince}` : ''}. Sync has not made progress recently.`
+            backlog === 'paused-for-version'
+              ? `${operations(health.pendingCount)} queued. Sync is paused until Chord is updated.`
+              : backlog === 'org-unresolved'
+                ? `${operations(health.pendingCount)} queued. Sync is blocked: no workspace could be resolved for this account.`
+                : `${operations(health.pendingCount)} queued${queuedSince ? ` since ${queuedSince}` : ''}. Sync has not made progress recently.`
           }
           className="flex h-[22px] shrink-0 items-center gap-1 rounded-md bg-status-warn/15 px-2 text-tiny tracking-tiny font-medium text-status-warn"
         >

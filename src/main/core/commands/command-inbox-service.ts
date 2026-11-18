@@ -44,20 +44,20 @@ class CommandInboxService implements IInitializable, IDisposable {
   private kickTimer: ReturnType<typeof setTimeout> | null = null;
   private processing = false;
   private pendingKick = false;
-
-  constructor() {
-    // Fetch what waited while the version handshake held traffic (mg6u.5).
-    serverTraffic.subscribe((open) => {
-      if (open) this.kick();
-    });
-  }
+  private unsubscribeTraffic: (() => void) | null = null;
 
   initialize(): void {
+    // Fetch what waited while the version handshake held traffic.
+    this.unsubscribeTraffic = serverTraffic.subscribe((open) => {
+      if (open) this.kick();
+    });
     this.timer = setInterval(() => void this.process(), FETCH_INTERVAL_MS);
     void this.process();
   }
 
   dispose(): void {
+    this.unsubscribeTraffic?.();
+    this.unsubscribeTraffic = null;
     if (this.timer) clearInterval(this.timer);
     if (this.kickTimer) clearTimeout(this.kickTimer);
     this.timer = null;

@@ -137,6 +137,13 @@ export function UpdateCard(): React.JSX.Element {
           </div>
         );
 
+      case 'unavailable':
+        return (
+          <p className="text-body tracking-body text-text-muted">
+            This build cannot update itself. Download the latest version from the website.
+          </p>
+        );
+
       default:
         return (
           <p className="flex items-center gap-1 text-body tracking-body text-text-muted">

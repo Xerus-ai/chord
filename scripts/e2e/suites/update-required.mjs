@@ -1,16 +1,19 @@
 /* global window, document, getComputedStyle -- page.evaluate and waitForFunction callbacks run inside the app window */
 /**
- * Live check of the version handshake (devstation-mg6u.2), driven through the
+ * Live check of the version handshake, driven through the
  * real app: the main process reads <CHORD_CLOUD_API_URL>/health and compares
  * the app's version with the server's min_desktop_version.
  *   - a server whose minimum is above the app's version: the app shows the
  *     "Update required" screen naming both versions, and not the workspace;
  *     Check for updates shows the updater working (or its answer), and Download
- *     from the website opens the releases page and quits (devstation-mg6u.5);
+ *     from website opens the releases page and quits;
  *   - a server whose minimum IS the app's version (the equality boundary): the
  *     app goes on to its normal first screen (sign-in, on a fresh profile);
  *   - no server at all: the first reading is unknown, which never blocks, so the
- *     app leaves its placeholder for sign-in (devstation-mg6u.5).
+ *     app leaves its placeholder for sign-in, which says the server could not be
+ *     reached;
+ *   - a server that accepts the connection and never answers: the first reading
+ *     gives up within its short timeout, so sign-in shows in under 4 s.
  * CHORD_RELEASES_URL points at the same local server, so the website action
  * opens a local page in the default browser and the server sees it.
  * Each launch points CHORD_CLOUD_API_URL at a local server answering /health as
@@ -24,6 +27,7 @@
  */
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
@@ -79,12 +83,25 @@ function verdict(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} — ${detail}`);
 }
 
+/** A server that accepts every connection and never answers, as a network that drops requests. */
+async function silentServer() {
+  const sockets = new Set();
+  const server = createTcpServer((socket) => sockets.add(socket));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const close = () => {
+    for (const socket of sockets) socket.destroy();
+    return new Promise((resolve) => server.close(resolve));
+  };
+  return { url: `http://127.0.0.1:${server.address().port}`, hits: [], close };
+}
+
 /**
  * A local sync server stand-in: /health with the given minimum, /releases as the
- * download page. A null minimum is no server at all (a port nobody listens on).
- * Resolves to { url, hits, close }.
+ * download page. A null minimum is no server at all (a port nobody listens on);
+ * 'silent' is one that never answers. Resolves to { url, hits, close }.
  */
 async function healthServer(minimum) {
+  if (minimum === 'silent') return silentServer();
   const hits = [];
   const server = createServer((req, res) => {
     hits.push(req.url);
@@ -141,11 +158,12 @@ async function withApp(minimum, profilePrefix, check) {
     })
   );
   const page = await app.firstWindow({ timeout: 90_000 });
+  const windowAt = Date.now();
   try {
     await page.waitForFunction(() => !!window.electronAPI, null, { timeout: 60_000 });
     const rpc = (channel, ...args) =>
       page.evaluate(([c, a]) => window.electronAPI.invoke(c, ...a), [channel, args]);
-    await check({ page, rpc, quit, hits: health.hits });
+    await check({ page, rpc, quit, hits: health.hits, windowAt });
   } catch (error) {
     if (!closed) await page.screenshot({ path: shot('failure') });
     throw error;
@@ -182,22 +200,33 @@ async function main() {
     const check = page.getByRole('button', { name: /check for updates/i });
     verdict('offers Check for updates', (await check.count()) === 1, '');
     await check.click();
-    // The updater answers with progress, "nothing found", or its error; any of
-    // them is the screen reacting. An unpackaged build has no update feed.
+    // The updater answers with progress, "nothing found", "cannot update
+    // itself", or its error; any of them is the screen reacting. An unpackaged
+    // build has no update feed.
     const reacted = await page
-      .getByText(/checking…|downloading|no update was found|failed|unavailable|error/i)
+      .getByText(/checking…|downloading|no update was found|cannot update itself|failed|error/i)
       .first()
       .waitFor({ timeout: 30_000 })
       .then(() => true)
       .catch(() => false);
+    await settle(page);
     await page.screenshot({ path: shot('checked') });
     verdict(
       'Check for updates shows the updater working or its answer',
       reacted,
       (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 200)
     );
+    verdict(
+      'after an answer the check is offered again, enabled',
+      (await page
+        .getByRole('button', { name: /check again/i })
+        .isEnabled()
+        .catch(() => false)) ||
+        (await page.getByRole('button', { name: /checking…|downloading/i }).count()) > 0,
+      ''
+    );
     // Last: this one quits the app.
-    await page.getByRole('button', { name: /download from the website/i }).click();
+    await page.getByRole('button', { name: /download from website/i }).click();
     const quitInTime = await Promise.race([
       quit.then(() => true),
       new Promise((resolve) => setTimeout(() => resolve(false), 15_000)),
@@ -227,7 +256,8 @@ async function main() {
     );
   });
 
-  // No server: unknown never blocks, and the placeholder gives way to sign-in.
+  // No server: unknown never blocks, and the placeholder gives way to sign-in,
+  // which says the server could not be reached.
   await withApp(null, 'chord-update-server-down', async ({ page, rpc }) => {
     await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
     await signInShown(page);
@@ -237,6 +267,25 @@ async function main() {
       'server down: main holds a checked unknown and the app reaches sign-in',
       state?.state === 'unknown' && state.checked === true,
       JSON.stringify(state ?? null)
+    );
+    verdict(
+      'server down: sign-in says the sync server could not be reached',
+      (await page.getByText(/could not reach the chord sync server/i).count()) === 1,
+      ''
+    );
+  });
+
+  // A server that never answers: the first reading gives up quickly.
+  await withApp('silent', 'chord-update-server-silent', async ({ page, rpc, windowAt }) => {
+    await page.getByRole('button', { name: 'Sign in' }).first().waitFor({ timeout: 60_000 });
+    const waited = Date.now() - windowAt;
+    await signInShown(page);
+    await page.screenshot({ path: shot('server-silent') });
+    const state = await rpc('app.getDesktopCompatibility');
+    verdict(
+      'silent server: sign-in replaces the placeholder in under 4 s',
+      waited < 4_000 && state?.state === 'unknown' && state.checked === true,
+      `${waited} ms; ${JSON.stringify(state ?? null)}`
     );
   });
 

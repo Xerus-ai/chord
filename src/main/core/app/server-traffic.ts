@@ -2,19 +2,24 @@ import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { log } from '@main/lib/logger';
 
 /**
- * Whether main may talk to the sync server, from the version handshake
- * (devstation-mg6u.5). The minimum version guards a server change that breaks
- * older desktops, so an app turned away (update_required) must stop sending,
- * not only hide its window behind the update screen.
+ * Whether main may start a request to the sync server, from the version
+ * handshake. The minimum version guards a server change that breaks older
+ * desktops, so an app turned away (update_required) must stop sending, not
+ * only hide its window behind the update screen.
  *
  *   awaiting  from hold() (the app's boot, before its senders start) until the
- *             first completed reading: nothing is sent yet
+ *             first completed reading: no sender starts a request
  *   open      the default; supported, or unknown (a failed read never blocks)
- *   paused    update_required; a later failed read keeps it paused
+ *   paused    update_required
+ *
+ * The gate is checked before a request starts. A cycle already past its check
+ * when the gate closes finishes the reads it is in (an org lookup, a listing, a
+ * page walk); the sync queue sends no further row and cloudFetch refuses every
+ * new request.
  *
  * The senders (sync queue, device socket, command inbox, git-state capture)
  * check isOpen() where they would reach the server and subscribe to resume.
- * Fed by DesktopCompatibilityMonitor after every completed check.
+ * Fed by the desktop compatibility service after every completed check.
  */
 type Gate = 'awaiting' | 'open' | 'paused';
 
@@ -35,20 +40,22 @@ class ServerTraffic {
   }
 
   /**
-   * Boot: send nothing until the first completed reading. Called once by
-   * src/main/index.ts before the senders start; code with no version check
+   * Boot: send nothing until the first completed reading. Called by
+   * startServerSenders before the senders start; code with no version check
    * (scripts, tests of a sender) keeps the default, open.
    */
   hold(): void {
     if (this.gate === 'open') this.gate = 'awaiting';
   }
 
+  /**
+   * `state` is the verdict the monitor keeps, which stays update_required
+   * through failed reads (the monitor never lets one replace a verdict), so
+   * update_required pauses and anything else completed opens.
+   */
   apply(state: DesktopCompatibility): void {
     if (state.state === 'unknown' && !state.checked) return;
-    let next: Gate;
-    if (state.state === 'update_required') next = 'paused';
-    else if (state.state === 'supported') next = 'open';
-    else next = this.gate === 'paused' ? 'paused' : 'open';
+    const next: Gate = state.state === 'update_required' ? 'paused' : 'open';
     if (next === this.gate) return;
     this.gate = next;
     log.info(`[server-traffic] ${next}`);
@@ -61,7 +68,7 @@ class ServerTraffic {
     }
   }
 
-  /** Called with true when traffic opens, false when it pauses. */
+  /** Called with true when traffic opens, false when it pauses; returns the unsubscribe. */
   subscribe(listener: (open: boolean) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

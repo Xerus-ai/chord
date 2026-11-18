@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * The version handshake (devstation-mg6u.2): the sync server names the oldest
+ * The version handshake: the sync server names the oldest
  * desktop app it still supports, and an app below it is told to update. An
  * installer that shipped without this check could never be told it is too old.
  */
@@ -12,9 +12,11 @@ import { z } from 'zod';
  * channel (stable and canary): an app below it is blocked until it updates, so
  * a minimum with nothing to update to locks every user out. The order, and the
  * probe that proves the release is live: server/DEPLOYMENT.md section 7.
- * When canaries of X.Y.Z carry the compatible client, write the first such
- * canary (X.Y.Z-canary.K): X.Y.Z-canary.N sorts below X.Y.Z, and X.Y.Z-0 would
- * also admit canaries cut before the change.
+ * Versions compare in semver order, so a prerelease (canary, beta) of X.Y.Z
+ * sorts below X.Y.Z and a minimum of X.Y.Z turns it away. When prereleases of
+ * X.Y.Z carry the compatible client, write the first such prerelease
+ * (X.Y.Z-canary.K, X.Y.Z-beta.K): it admits that one and every later one, and
+ * X.Y.Z-0 would also admit prereleases cut before the change.
  */
 export const MIN_DESKTOP_VERSION = '0.1.0';
 

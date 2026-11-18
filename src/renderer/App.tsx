@@ -220,7 +220,7 @@ export function App() {
       <PostHogFeatureFlagsProvider>
         {/* The sync server's verdict on this version comes before the session
             gates: nothing else works until an unsupported app updates. */}
-        <DesktopCompatibilityGate frame={ThemeProvider}>
+        <DesktopCompatibilityGate>
           <AppRoot />
         </DesktopCompatibilityGate>
       </PostHogFeatureFlagsProvider>
