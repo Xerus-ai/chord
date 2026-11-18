@@ -324,23 +324,35 @@ gracefully in either direction.
 ### Raising the minimum desktop version: client before server
 
 `MIN_DESKTOP_VERSION` (`packages/protocol/src/version.ts`) is what `/health`
-advertises, and an app below it stops talking to the server and shows only the
-update screen. Raise it in a server deploy **only after** a desktop release that
-meets it is published and reachable, or every paused user is told to update to
+advertises, and an app below it shows only the update screen until it updates.
+Raise it in a server deploy **only after** a desktop release that meets it is
+published and reachable on every channel, or users are told to update to
 something that does not exist yet:
 
-1. Publish the desktop release that meets the new minimum on every channel
-   that carries users (stable, and canary when canary users must stay
-   connected): installers uploaded to R2 first, then the update manifests.
-2. Probe each channel's tag: `node scripts/release/probe.ts --tag vX.Y.Z --out <receipt>`
-   must pass, meaning every manifest and the installers it names answer 200.
-3. Only then merge the change that raises `MIN_DESKTOP_VERSION` and deploy that
+1. Publish a release that meets the new minimum on **both** channels. Each
+   channel's apps read only their own manifests (`v1-stable*`, `v1-canary*`),
+   so a stable release leaves every older canary install with nothing to
+   update to. The upload puts installers on R2 first, then the manifests.
+2. Probe both tags, the stable `vX.Y.Z` and the canary that meets the minimum:
+   `node scripts/release/probe.ts --tag <tag> --out <receipt>` must pass. It
+   checks that each platform's manifest (Windows, mac, linux) names exactly
+   that tag's version and that every file it names answers 200 with a matching
+   sha512. Probe the releases that are current when you raise the minimum: once
+   a newer release replaces a manifest, an older tag's probe fails.
+3. Check that the download page the update screen links to
+   (`CHORD_RELEASES_URL`) serves that release: the probe covers only R2.
+4. Only then merge the change that raises `MIN_DESKTOP_VERSION` and deploy that
    server release.
 
-Lowering it, or rolling the server back to a lower minimum, is safe at any
-time; an app it paused resumes on its next version check (every 30 minutes) or
-on restart. Write a minimum as `X.Y.Z-0` when canaries of X.Y.Z carry the
-compatible client too, since `X.Y.Z-canary.N` sorts below `X.Y.Z`.
+Set the minimum to the first compatible build. When canaries of X.Y.Z carry
+the compatible client, write `X.Y.Z-canary.K` for the first such canary
+(`X.Y.Z-canary.N` sorts below `X.Y.Z`); `X.Y.Z-0` would also admit canaries cut
+before the change.
+
+Lowering it, or rolling the server back to a lower minimum, locks no one out:
+an app it blocked passes on its next version check (every 30 minutes) or on
+restart. It is data-safe only if the running server still accepts those older
+clients; a minimum is usually raised because it no longer does.
 
 ## 8. Upgrades & restarts
 
