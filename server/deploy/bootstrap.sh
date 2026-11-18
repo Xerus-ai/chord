@@ -92,7 +92,8 @@ if [ "$(readlink /opt/node 2>/dev/null || true)" != "$node_dir" ]; then
   note "/opt/node -> $node_dir"
 fi
 if [ ! -e "$node_dir/bin/pnpm" ]; then
-  "$node_dir/bin/corepack" enable --install-directory "$node_dir/bin" pnpm
+  # corepack starts with `env node`, and node is not on root's PATH.
+  "$node_dir/bin/node" "$node_dir/bin/corepack" enable --install-directory "$node_dir/bin" pnpm
   note "corepack pnpm shim"
 fi
 
