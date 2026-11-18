@@ -46,9 +46,11 @@ export function contractFor(sql: string): string | null {
 }
 
 /**
- * The SQL with comments and quoted strings blanked, so a DROP TABLE inside a
- * comment or a string literal is not a statement. Dollar-quoted bodies (DO $$
- * blocks) are kept as SQL: DDL inside them still runs.
+ * The SQL with comments, string literals and quoted identifiers blanked, so a
+ * DROP TABLE inside a comment or a literal is not a statement and a `;` inside
+ * a quoted name does not split one. Dollar-quoted bodies (DO $$ blocks) are
+ * kept as SQL: DDL inside them still runs, and destructiveStatement finds it
+ * anywhere in a statement, not only at its start.
  */
 function stripCommentsAndStrings(sql: string): string {
   let out = '';
@@ -62,15 +64,15 @@ function stripCommentsAndStrings(sql: string): string {
       const end = sql.indexOf('*/', i + 2);
       i = end === -1 ? sql.length : end + 2;
       out += ' ';
-    } else if (c === "'") {
+    } else if (c === "'" || c === '"') {
       i++;
       while (i < sql.length) {
-        if (sql[i] === "'" && sql[i + 1] === "'") i += 2;
-        else if (sql[i] === "'") break;
+        if (sql[i] === c && sql[i + 1] === c) i += 2;
+        else if (sql[i] === c) break;
         else i++;
       }
       i++;
-      out += "''";
+      out += c === "'" ? "''" : '"q"';
     } else if (c === '$') {
       const tag = /^\$[A-Za-z_]*\$/.exec(sql.slice(i));
       if (tag) {
@@ -105,21 +107,30 @@ function splitActions(text: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-const ALTER_TABLE = /^ALTER TABLE\s+(?:IF EXISTS\s+)?(?:ONLY\s+)?("[^"]+"|\S+)\s+([\s\S]*)$/i;
+/** An ALTER TABLE anywhere in a statement (inside a DO block too); group 1 is its actions. */
+const ALTER_TABLE = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?:"q"|\S+)\s+([\s\S]*)$/i;
+const DROP_OBJECT =
+  /\bDROP\s+(TABLE|VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE|TRIGGER|TYPE|SEQUENCE|SCHEMA)\b/i;
+/** A column name after ALTER [COLUMN]: `ALTER COLUMN type ...` names a column called type. */
+const COLUMN = String.raw`(?:COLUMN\s+(?:"Q"|\S+)|(?!COLUMN\b)(?:"Q"|\S+))`;
+const ALTER_COLUMN_TYPE = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+(?:SET\s+DATA\s+)?TYPE\b`);
+const ALTER_COLUMN_SET_NOT_NULL = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+SET\s+NOT\s+NULL\b`);
+const ALTER_COLUMN_DROP_DEFAULT = new RegExp(String.raw`^ALTER\s+${COLUMN}\s+DROP\s+DEFAULT\b`);
 
 /** Why one ALTER TABLE action breaks the previous release, or null. */
 function destructiveAction(action: string): string | null {
   const a = action.toUpperCase();
   if (/^DROP\s+CONSTRAINT\b/.test(a)) return null;
   if (/^DROP\b/.test(a)) return 'drops a column';
-  if (/^RENAME\s+(?!TO\b|CONSTRAINT\b)/.test(a)) return 'renames a column';
-  if (
-    /^ALTER\s+COLUMN\s+("[^"]+"|\S+)\s+(?:SET\s+DATA\s+)?TYPE\b/.test(a) ||
-    /^ALTER\s+(?!COLUMN\b)("[^"]+"|\S+)\s+(?:SET\s+DATA\s+)?TYPE\b/.test(a)
-  ) {
-    return "changes a column's type";
-  }
-  if (/^ADD\s+(?!CONSTRAINT\b)/.test(a) && /\bNOT\s+NULL\b/.test(a) && !/\bDEFAULT\b/.test(a)) {
+  if (/^RENAME\s+TO\b/.test(a)) return 'renames a table';
+  if (/^RENAME\s+(?!CONSTRAINT\b)/.test(a)) return 'renames a column';
+  if (/^SET\s+SCHEMA\b/.test(a)) return 'moves a table to another schema';
+  if (ALTER_COLUMN_TYPE.test(a)) return "changes a column's type";
+  if (ALTER_COLUMN_SET_NOT_NULL.test(a)) return 'makes a column NOT NULL';
+  if (ALTER_COLUMN_DROP_DEFAULT.test(a)) return "drops a column's default";
+  // ON DELETE/UPDATE SET DEFAULT is a foreign key action, not a column default.
+  const hasDefault = /(?<!\bSET\s)\bDEFAULT\b/.test(a);
+  if (/^ADD\s+(?!CONSTRAINT\b)/.test(a) && /\bNOT\s+NULL\b/.test(a) && !hasDefault) {
     return 'adds a NOT NULL column without a DEFAULT';
   }
   return null;
@@ -127,10 +138,13 @@ function destructiveAction(action: string): string | null {
 
 /** Why one statement breaks the previous release, or null. */
 function destructiveStatement(statement: string): string | null {
-  if (/^DROP\s+TABLE\b/i.test(statement)) return 'drops a table';
+  const drop = DROP_OBJECT.exec(statement);
+  if (drop) return `drops a ${drop[1].toLowerCase().replace(/\s+/g, ' ')}`;
+  if (/\bTRUNCATE\b/i.test(statement)) return 'truncates a table';
+  if (/\bALTER\s+TYPE\s+\S+\s+RENAME\s+VALUE\b/i.test(statement)) return 'renames an enum value';
   const alter = ALTER_TABLE.exec(statement);
   if (!alter) return null;
-  for (const action of splitActions(alter[2])) {
+  for (const action of splitActions(alter[1])) {
     const reason = destructiveAction(action);
     if (reason) return reason;
   }

@@ -169,15 +169,26 @@ describe('deploy.sh', () => {
   it('a failed health check flips back to the live release', { timeout: 120_000 }, async () => {
     const { root, run } = await box();
     const releases = join(root, 'releases');
+    // The operator's .env (server/DEPLOYMENT.md); deploy.sh refuses to run without it.
+    mkdirSync(join(root, 'shared'), { recursive: true });
+    writeFileSync(join(root, 'shared', '.env'), 'MIGRATE_DATABASE_URL=postgres://unused\n');
 
     const first = run(`deploy v1.0.0 ${SHA}`, releaseTar());
     expect(first.code, first.out).toBe(0);
     expect(current(root)).toBe('v1.0.0');
+    // The release reads the shared .env and keeps its Yjs files in the shared folder.
+    const live = join(releases, 'v1.0.0', 'server');
+    expect(readlinkSync(join(live, '.env')).replace(/\\/g, '/')).toMatch(/shared\/\.env$/);
+    expect(readlinkSync(join(live, 'data', 'hocuspocus')).replace(/\\/g, '/')).toMatch(
+      /shared\/hocuspocus\/?$/
+    );
 
     // A release whose server is not the release it claims to be.
     const bad = run(`deploy v1.1.0 ${SHA}`, releaseTar('v0.0.0-wrong'));
     expect(bad.code, bad.out).not.toBe(0);
     expect(current(root)).toBe('v1.0.0');
+    // The failed release is removed, so it never takes a good release's place.
+    expect(readdirSync(releases)).not.toContain('v1.1.0');
     const log = readFileSync(join(root, 'shared', 'deploy.log'), 'utf8');
     expect(log).toMatch(/v1\.1\.0/);
     expect(log).toMatch(/schema_ahead: true/);
@@ -193,6 +204,16 @@ describe('deploy.sh', () => {
     expect(
       readFileSync(join(root, 'shared', 'deploy.log'), 'utf8').match(/schema_ahead: true/g)
     ).toHaveLength(1);
+
+    // A migrate that fails after applying some files does log schema_ahead.
+    const partly = run(`deploy v1.1.2 ${SHA}`, releaseTar(), {
+      DEPLOY_MIGRATE: 'touch .migrated-partly; exit 7',
+    });
+    expect(partly.code, partly.out).not.toBe(0);
+    expect(current(root)).toBe('v1.0.0');
+    expect(
+      readFileSync(join(root, 'shared', 'deploy.log'), 'utf8').match(/schema_ahead: true/g)
+    ).toHaveLength(2);
 
     // Rerunning the live tag (a release.yml rerun) changes nothing and succeeds.
     const rerun = run(`deploy v1.0.0 ${SHA}`, releaseTar());

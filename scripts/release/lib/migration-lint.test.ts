@@ -79,10 +79,16 @@ describe('migration lint', () => {
     expect(lint('ALTER TABLE a DROP CONSTRAINT a_b_fkey;')).toEqual([]);
     expect(lint('DROP INDEX IF EXISTS a_b_idx;')).toEqual([]);
     expect(lint('ALTER TABLE a ALTER COLUMN title DROP NOT NULL;')).toEqual([]);
-    expect(lint('ALTER TABLE a ALTER COLUMN status DROP DEFAULT;')).toEqual([]);
+    expect(lint('ALTER TABLE a ALTER COLUMN status SET DEFAULT 0;')).toEqual([]);
     expect(lint('CREATE TABLE a (id text PRIMARY KEY, type text NOT NULL);')).toEqual([]);
     expect(lint('ALTER TABLE a ADD COLUMN n integer NOT NULL DEFAULT 0;')).toEqual([]);
+    expect(
+      lint(
+        "ALTER TABLE a ADD COLUMN b text NOT NULL DEFAULT 'x' REFERENCES t ON DELETE SET DEFAULT;"
+      )
+    ).toEqual([]);
     expect(lint('ALTER TABLE a ADD COLUMN note text;')).toEqual([]);
+    expect(lint('ALTER TABLE "odd;name" ADD COLUMN note text;')).toEqual([]);
     expect(lint("-- DROP TABLE a; is only a comment\nSELECT 'DROP TABLE a';")).toEqual([]);
 
     // Destructive.
@@ -93,6 +99,25 @@ describe('migration lint', () => {
     expect(lint('ALTER TABLE a ALTER COLUMN b TYPE bigint;')).toHaveLength(1);
     expect(lint('ALTER TABLE a ALTER COLUMN b SET DATA TYPE bigint;')).toHaveLength(1);
     expect(lint('ALTER TABLE a ADD COLUMN n integer NOT NULL;')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ALTER COLUMN status DROP DEFAULT;')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ALTER COLUMN status SET NOT NULL;')).toHaveLength(1);
+    expect(lint('ALTER TABLE a RENAME TO b;')).toHaveLength(1);
+    expect(lint('ALTER TABLE a SET SCHEMA archive;')).toHaveLength(1);
+    expect(lint('DROP VIEW IF EXISTS v;')).toHaveLength(1);
+    expect(lint('DROP FUNCTION f();')).toHaveLength(1);
+    expect(lint('TRUNCATE a;')).toHaveLength(1);
+    expect(lint("ALTER TYPE mood RENAME VALUE 'sad' TO 'blue';")).toHaveLength(1);
+    expect(lint('ALTER TABLE "odd;name" DROP COLUMN b;')).toHaveLength(1);
+    // A foreign key's ON DELETE SET DEFAULT is not the column's DEFAULT.
+    expect(
+      lint('ALTER TABLE a ADD COLUMN b text NOT NULL REFERENCES t ON DELETE SET DEFAULT;')
+    ).toHaveLength(1);
+    // DDL inside a guarded DO block still runs.
+    expect(
+      lint(
+        "DO $$ BEGIN IF EXISTS (SELECT 1 FROM t WHERE x = 'y') THEN ALTER TABLE a DROP COLUMN b; END IF; END $$;"
+      )
+    ).toHaveLength(1);
     // Each action of a multi-action ALTER counts.
     expect(
       lint('ALTER TABLE a\n  DROP COLUMN IF EXISTS b,\n  DROP COLUMN IF EXISTS c;')
@@ -117,5 +142,7 @@ describe('migration lint', () => {
     const files = new Set(unbaselined.map((f) => f.file));
     expect(files.has('0016_resource_access.sql')).toBe(true);
     expect(files.has('0021_drop_notification_sentences.sql')).toBe(true);
+    // 0024 drops a column default an older server relied on.
+    expect(files.has('0024_artifact_status.sql')).toBe(true);
   });
 });

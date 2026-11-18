@@ -117,7 +117,9 @@ fi
 ensure_dir /opt/chord 1775 root:deploy
 ensure_dir /opt/chord/bin 755 root:root
 ensure_dir /opt/chord/releases 755 deploy:deploy
-ensure_dir /opt/chord/shared 2750 deploy:chord
+# Sticky: deploy writes release.env and deploy.log here but cannot replace the
+# root-owned .env.
+ensure_dir /opt/chord/shared 3750 deploy:chord
 ensure_dir /opt/chord/shared/hocuspocus 2770 chord:chord
 if [ -f /opt/chord/shared/.env ]; then
   if [ "$(stat -c '%a %U:%G' /opt/chord/shared/.env)" != "640 root:chord" ]; then
@@ -141,18 +143,46 @@ visudo -cqf "$sudoers_tmp"
 install_file "$sudoers_tmp" /etc/sudoers.d/chord-deploy 440 root:root || true
 rm -f "$sudoers_tmp"
 
+# The deploy key lives in a root-owned file sshd reads for deploy only: a code
+# deploy runs as deploy, and must not be able to rewrite its own key without
+# command=/restrict (deploy owns its home, so ~/.ssh would not hold).
 key=${1:-}
-keys=/home/deploy/.ssh/authorized_keys
+keys=/etc/ssh/chord-deploy.authorized_keys
+old_keys=/home/deploy/.ssh/authorized_keys
+if [ -z "$key" ] && [ ! -s "$keys" ] && [ -s "$old_keys" ]; then
+  key=$(sed -n 's/^command="\/opt\/chord\/bin\/deploy.sh",restrict //p' "$old_keys" | head -1)
+fi
 if [ -n "$key" ]; then
   [[ $key =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+(\ [^\"]*)?$ ]] || { echo "bootstrap: the deploy key must be one ssh-ed25519 public key" >&2; exit 2; }
   keys_tmp=$(mktemp)
   printf 'command="/opt/chord/bin/deploy.sh",restrict %s\n' "$key" >"$keys_tmp"
-  install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-  install_file "$keys_tmp" "$keys" 600 deploy:deploy || true
+  install_file "$keys_tmp" "$keys" 644 root:root || true
   rm -f "$keys_tmp"
 elif [ ! -s "$keys" ]; then
   echo "bootstrap: pass the deploy public key on the first run" >&2
   exit 2
+fi
+sshd_tmp=$(mktemp)
+printf 'Match User deploy\n    AuthorizedKeysFile %s\n' "$keys" >"$sshd_tmp"
+if install_file "$sshd_tmp" /etc/ssh/sshd_config.d/chord-deploy.conf 644 root:root; then
+  sshd -t
+  systemctl reload ssh
+fi
+rm -f "$sshd_tmp"
+if [ -e "$old_keys" ]; then
+  rm -f "$old_keys"
+  note "removed $old_keys (the key is in $keys)"
+fi
+
+# Only SSH and Caddy's ports are open; the server's own ports (1234, 1236)
+# stay behind Caddy even if the provider firewall changes.
+if ! ufw status | grep -q '^Status: active'; then
+  ufw allow 22/tcp >/dev/null
+  ufw allow 80/tcp >/dev/null
+  ufw allow 443/tcp >/dev/null
+  ufw allow 1235/tcp >/dev/null
+  ufw --force enable >/dev/null
+  note "ufw on: 22, 80, 443, 1235"
 fi
 
 if install_file "$here/chord-sync.service" /etc/systemd/system/chord-sync.service 644 root:root; then

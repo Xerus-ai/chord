@@ -11,16 +11,22 @@
 #
 #   git archive --format=tar <tag> | ssh deploy@<host> deploy <tag> <sha>
 #
-# Steps: unpack to releases/<tag> -> install, build, link the shared .env and
-# Hocuspocus data -> migrate --status, migrate -> write release.env -> flip
-# `current` -> restart -> /health must name the tag 5 times running. An
-# unhealthy release flips back to the previous one; when migrate ran, the log
-# says `schema_ahead: true` (the database is ahead of the live code, which
-# expand/contract keeps compatible; it is not rolled back). Keeps the newest 3
-# releases. Rerunning the live tag succeeds without changing anything.
+# The key gets no shell, but it deploys code: the release's build runs as
+# deploy and the server runs it as chord, with the production .env. Treat the
+# key as the right to ship code to production.
 #
-# Exit: 0 live, 1 failed (current is the previous release), 2 refused request,
-# 75 another deploy holds the lock.
+# Steps: unpack to releases/<tag> -> link the shared .env and Hocuspocus data ->
+# install, build -> migrate --status, migrate (on MIGRATE_DATABASE_URL, the
+# direct database URL: session advisory locks do not hold through a pooler) ->
+# write release.env -> flip `current` -> restart -> /health must name the tag 5
+# times running. An unhealthy release flips back to the previous one and is
+# removed; when migrations were applied, the log says `schema_ahead: true` (the
+# database is ahead of the live code, which the migration lint keeps
+# compatible; it is not rolled back). Keeps the newest 3 releases. Rerunning
+# the live tag succeeds without changing anything.
+#
+# Exit: 0 live, 1 failed (the previous release is live; on a first deploy there
+# is none), 2 refused request, 75 another deploy holds the lock.
 #
 # DEPLOY_ROOT, DEPLOY_PREPARE, DEPLOY_MIGRATE, DEPLOY_RESTART, DEPLOY_HEALTH_URL
 # and DEPLOY_HEALTH_INTERVAL exist for scripts/release/deploy-sh.test.ts; sshd
@@ -38,8 +44,13 @@ fi
 tag=${BASH_REMATCH[1]}
 sha=${BASH_REMATCH[3]}
 
+# A dropped SSH connection must not stop the script between the flip and the
+# flip-back: writes to the gone stdout fail quietly instead.
+trap '' PIPE
+
 ROOT=${DEPLOY_ROOT:-/opt/chord}
 RESTART=${DEPLOY_RESTART:-sudo -n /usr/bin/systemctl restart chord-sync.service}
+# The unit's PORT (chord-sync.service); Caddy proxies the same port.
 HEALTH_URL=${DEPLOY_HEALTH_URL:-http://127.0.0.1:1234/health}
 INTERVAL=${DEPLOY_HEALTH_INTERVAL:-2}
 HEALTH_TRIES=30
@@ -55,21 +66,28 @@ mkdir -p "$releases" "$shared/hocuspocus"
 
 log() {
   printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tag" "$*" >>"$shared/deploy.log"
-  echo "deploy: $*"
+  echo "deploy: $*" 2>/dev/null || true
 }
 
-# One deploy at a time; a lock left by a deploy that died is taken over.
-if ! mkdir "$lock" 2>/dev/null; then
+# One deploy at a time. The lock is a directory holding its owner's pid, put in
+# place by one rename, so it never exists without a pid. A dead owner's lock is
+# moved aside by a rename too, so of two deploys that find it only one takes it.
+take_lock() {
+  local mine=$ROOT/.deploy.lock.$$ holder
+  mkdir "$mine"
+  echo $$ >"$mine/pid"
+  mv -T "$mine" "$lock" 2>/dev/null && return 0
   holder=$(cat "$lock/pid" 2>/dev/null || true)
-  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-    echo "deploy.sh: deploy $holder is in progress" >&2
-    exit 75
+  if ! { [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; }; then
+    mv -T "$lock" "$ROOT/.deploy.lock.stale.$$" 2>/dev/null && rm -rf "$ROOT/.deploy.lock.stale.$$"
+    mv -T "$mine" "$lock" 2>/dev/null && return 0
   fi
-  rm -rf "$lock"
-  mkdir "$lock"
-fi
-echo $$ >"$lock/pid"
-trap 'rm -rf "$lock"' EXIT
+  rm -rf "$mine"
+  echo "deploy.sh: deploy ${holder:-?} is in progress" >&2
+  exit 75
+}
+take_lock
+trap '[ "$(cat "$lock/pid" 2>/dev/null)" = $$ ] && rm -rf "$lock"' EXIT
 
 live_path() {
   local p
@@ -105,24 +123,52 @@ flip() {
 restart() { bash -c "$RESTART"; }
 
 write_release_env() {
-  printf 'CHORD_RELEASE_TAG=%s\nCHORD_RELEASE_COMMIT=%s\n' "$1" "$2" >"$shared/release.env.tmp"
+  printf '%s\n' "$1" >"$shared/release.env.tmp"
   mv -f "$shared/release.env.tmp" "$shared/release.env"
+}
+
+# The release's server reads the operator's .env and keeps Yjs files in the
+# shared folder, so a deploy never loses them.
+link_shared() {
+  if [ ! -f "$shared/.env" ]; then
+    echo "deploy.sh: $shared/.env is missing; the operator provides it (server/DEPLOYMENT.md)" >&2
+    return 1
+  fi
+  ln -sfn "$shared/.env" "$dest/server/.env"
+  mkdir -p "$dest/server/data"
+  ln -sfn "$shared/hocuspocus" "$dest/server/data/hocuspocus"
 }
 
 # shellcheck disable=SC2329 # called through run_step
 prepare_release() {
-  ln -sfn "$shared/.env" server/.env
-  mkdir -p server/data
-  ln -sfn "$shared/hocuspocus" server/data/hocuspocus
   pnpm install --frozen-lockfile --ignore-scripts
   pnpm --filter @chord/sync-server run build
 }
 
+# shellcheck disable=SC2329 # called by migrate_release, through run_step
+pending_count() {
+  local out
+  out=$(DATABASE_URL=$1 timeout 300 pnpm -s run migrate --status) || return 1
+  printf '%s\n' "$out" | grep -c '^\[migrate\] pending:' || true
+}
+
 # shellcheck disable=SC2329 # called through run_step
 migrate_release() {
+  local url before after
+  url=$(sed -n 's/^MIGRATE_DATABASE_URL=//p' "$shared/.env" | sed 's/^"\(.*\)"$/\1/')
+  if [ -z "$url" ]; then
+    echo "deploy.sh: MIGRATE_DATABASE_URL (the direct database URL, not the pooler) is missing from $shared/.env" >&2
+    return 1
+  fi
+  cd server
   # --status stops before any change when the database is ahead of this
   # release, a shipped migration was edited, or one is out of order.
-  (cd server && pnpm run migrate --status && pnpm run migrate)
+  before=$(pending_count "$url") || return 1
+  DATABASE_URL=$url timeout 900 pnpm -s run migrate && return 0
+  # Each file commits on its own: a failure after the first leaves some applied.
+  after=$(pending_count "$url") || after=$before
+  [ "$after" -lt "$before" ] && touch "$dest/.migrated-partly"
+  return 1
 }
 
 # Runs a step in the release: the DEPLOY_* override when set, else the function.
@@ -173,20 +219,25 @@ mv "$releases/.$tag.tmp" "$dest"
 touch "$dest"
 log "unpacked $sha"
 
-if ! run_step "${DEPLOY_PREPARE-}" prepare_release; then
+if ! link_shared || ! run_step "${DEPLOY_PREPARE-}" prepare_release; then
   rm -rf "$dest"
   log "install or build failed; nothing changed"
   exit 1
 fi
 if ! run_step "${DEPLOY_MIGRATE-}" migrate_release; then
+  if [ -e "$dest/.migrated-partly" ]; then
+    log "migrate failed partway; current is unchanged"
+    log "schema_ahead: true (some migrations of $tag are applied; the live release runs on them)"
+  else
+    log "migrate failed before applying anything; current is unchanged"
+  fi
   rm -rf "$dest"
-  log "migrate failed; current is unchanged (check migrate --status: a file that failed was rolled back)"
   exit 1
 fi
 log "migrated"
 
 prev_env=$(cat "$shared/release.env" 2>/dev/null || true)
-write_release_env "$tag" "$sha"
+write_release_env "$(printf 'CHORD_RELEASE_TAG=%s\nCHORD_RELEASE_COMMIT=%s' "$tag" "$sha")"
 flip "$dest"
 if restart && wait_healthy "$tag"; then
   log "live"
@@ -194,16 +245,18 @@ if restart && wait_healthy "$tag"; then
   exit 0
 fi
 
-log "unhealthy: /health did not name $tag; flipping back to ${prev_tag:-nothing}"
+log "unhealthy: /health did not name $tag"
 if [ -n "$prev" ]; then
-  printf '%s\n' "$prev_env" >"$shared/release.env.tmp"
-  mv -f "$shared/release.env.tmp" "$shared/release.env"
+  write_release_env "$prev_env"
   flip "$prev"
+  rm -rf "$dest"
   if restart && wait_healthy "$prev_tag"; then
     log "flipped back; $prev_tag is live"
   else
     log "flipped back, but $prev_tag is not healthy either"
   fi
+else
+  log "no previous release to flip back to; current stays on $tag, which is unhealthy"
 fi
 log "schema_ahead: true (migrations of $tag are applied; the live release runs on them)"
 exit 1

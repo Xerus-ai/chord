@@ -19,7 +19,25 @@ problem. Follow this top to bottom.
   bootstrap rerun that changes nothing, and the deploy key refused a shell.
 - `/opt/chord/shared/.env` holds the section 3 values. Leave out `PORT`,
   `HOCUSPOCUS_PORT` and `NODE_ENV`: the unit sets them, because Caddy owns
-  port 1235 and Hocuspocus listens behind it on 1236.
+  port 1235 and Hocuspocus listens behind it on 1236. It also needs
+  `MIGRATE_DATABASE_URL`, the direct (unpooled) connection string: Neon's host
+  without `-pooler`. The migrate lock is a session advisory lock, and those
+  do not hold through the pooler.
+- The deploy key can't open a shell, but it can ship code: the build runs as
+  `deploy`, and the server runs as `chord` with the production `.env`. Guard
+  it like a production credential.
+- **Rolling back by hand.** `deploy.sh` can't do this: `migrate --status`
+  refuses a release that is older than the database. As root:
+
+  ```bash
+  ls -t /opt/chord/releases                      # the newest 3; pick <prev>
+  ln -sfn /opt/chord/releases/<prev> /opt/chord/current.tmp && mv -T /opt/chord/current.tmp /opt/chord/current
+  printf 'CHORD_RELEASE_TAG=%s\nCHORD_RELEASE_COMMIT=%s\n' <prev> <its sha> > /opt/chord/shared/release.env
+  systemctl restart chord-sync && curl -s 127.0.0.1:1234/health   # names <prev>
+  ```
+
+  Only migrations written expand/contract leave the database usable by
+  `<prev>` (see the lint below).
 - `/health` returns `version` (the deployed tag; `null` outside a deploy),
   `commit` and `epoch`.
 - Release preflight runs `pnpm run lint:migrations`. A migration that drops,
