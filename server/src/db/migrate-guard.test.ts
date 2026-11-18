@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,10 @@ const MIGRATE_TS = join(HERE, 'migrate.ts');
 const REFUSAL = /refusing to write/;
 
 const HOST = 'migrate-guard.invalid';
-const CONNECT_ATTEMPT = /ENOTFOUND migrate-guard\.invalid/;
+// ENOTFOUND where the resolver answers, EAI_AGAIN where a CI container has none.
+const CONNECT_ATTEMPT = /(ENOTFOUND|EAI_AGAIN) migrate-guard\.invalid/;
+// Each case starts tsx and compiles migrate.ts; a loaded full run is slow.
+const CASE_TIMEOUT_MS = 60_000;
 
 let cwd = '';
 
@@ -42,16 +45,20 @@ interface Run {
   connected: boolean;
 }
 
-function runMigrate(args: string[], extraEnv: Record<string, string> = {}): Promise<Run> {
+function runMigrate(
+  args: string[],
+  extraEnv: Record<string, string> = {},
+  dir = cwd
+): Promise<Run> {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
   if (!('CHORD_RELEASE_TAG' in extraEnv)) delete env.CHORD_RELEASE_TAG;
   env.DATABASE_URL = `postgres://${HOST}/guard`;
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [TSX_CLI, MIGRATE_TS, ...args], { cwd, env });
+    const child = spawn(process.execPath, [TSX_CLI, MIGRATE_TS, ...args], { cwd: dir, env });
     let output = '';
     child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
     child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
-    const timer = setTimeout(() => child.kill(), 30_000);
+    const timer = setTimeout(() => child.kill(), CASE_TIMEOUT_MS - 5_000);
     child.on('error', reject);
     child.on('close', (code) => {
       clearTimeout(timer);
@@ -60,7 +67,7 @@ function runMigrate(args: string[], extraEnv: Record<string, string> = {}): Prom
   });
 }
 
-describe('migrate CLI write guard', () => {
+describe('migrate CLI write guard', { timeout: CASE_TIMEOUT_MS }, () => {
   it('refuses to apply without a release tag or --unreleased, before connecting', async () => {
     const run = await runMigrate([]);
     expect(run.code).not.toBe(0);
@@ -74,6 +81,24 @@ describe('migrate CLI write guard', () => {
     expect(run.code).not.toBe(0);
     expect(run.output).toMatch(REFUSAL);
     expect(run.connected).toBe(false);
+  });
+
+  it('refuses a release tag that is only whitespace', async () => {
+    const run = await runMigrate([], { CHORD_RELEASE_TAG: '   ' });
+    expect(run.output).toMatch(REFUSAL);
+    expect(run.connected).toBe(false);
+  });
+
+  it('refuses a release tag that comes from a .env file instead of the deploy', async () => {
+    const withEnvFile = mkdtempSync(join(tmpdir(), 'migrate-guard-env-'));
+    try {
+      writeFileSync(join(withEnvFile, '.env'), 'CHORD_RELEASE_TAG=v9.9.9\n');
+      const run = await runMigrate([], {}, withEnvFile);
+      expect(run.output).toMatch(REFUSAL);
+      expect(run.connected).toBe(false);
+    } finally {
+      rmSync(withEnvFile, { recursive: true, force: true });
+    }
   });
 
   it.each([

@@ -168,7 +168,10 @@ empty) and **stops**, because blindly re-applying 0000 onward to it would
 fail on the first unguarded statement — and 0003 carries a data migration
 that renumbers artifact versions.
 
-Tell it what that database already received, once:
+Tell it what that database already received, once. This is a one-time
+operator step on the shared database, so it carries the tag of the release
+being deployed, exactly as deploy.sh would; on any other database use
+`--unreleased` instead of the tag:
 
 ```bash
 CHORD_RELEASE_TAG=<tag> pnpm run migrate --baseline 0010   # record 0000..0010 as applied, run none of them
