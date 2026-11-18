@@ -42,6 +42,7 @@ const { commandInboxService } = await import('@main/core/commands/command-inbox-
 const { deviceSocketService } = await import('@main/core/commands/device-socket-service');
 const { DesktopCompatibilityMonitor } = await import('./desktop-compatibility');
 const { serverTraffic } = await import('./server-traffic');
+const { cloudFetch } = await import('@main/core/work-items/cloud-work-items-client');
 
 const ORG_ID = 'org-traffic';
 const X = '66666666-6666-4666-8666-666666666666';
@@ -284,5 +285,13 @@ describe('server traffic follows the version verdict', () => {
     const held = queueRows().filter((r) => r.status === 'pending');
     expect(held).toHaveLength(1);
     expect(held[0]!.retryCount).toBe(0);
+  });
+
+  // Callers the senders' checks do not cover (an agent's publish, an RPC) go
+  // through the one fetch helper: it refuses while paused, before any request.
+  it('the shared cloud fetch refuses while paused', async () => {
+    requests = [];
+    await expect(cloudFetch('/organizations/org-traffic/sharing-policy')).rejects.toThrow(/paused/);
+    expect(traffic()).toEqual([]);
   });
 });

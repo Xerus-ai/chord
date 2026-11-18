@@ -18,6 +18,14 @@ import { log } from '@main/lib/logger';
  */
 type Gate = 'awaiting' | 'open' | 'paused';
 
+/** A request to the sync server refused because traffic is held or paused. */
+export class ServerTrafficPausedError extends Error {
+  constructor(path: string) {
+    super(`sync server traffic is paused (version check): ${path}`);
+    this.name = 'ServerTrafficPausedError';
+  }
+}
+
 class ServerTraffic {
   private gate: Gate = 'open';
   private readonly listeners = new Set<(open: boolean) => void>();

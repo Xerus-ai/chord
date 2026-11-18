@@ -22,6 +22,7 @@ import { queryClient } from './lib/query-client';
 import { navigationStore } from './lib/stores/navigation-store';
 import { SyncSocketContextProvider } from './lib/sync/sync-socket-provider';
 import { RightSidebarProvider } from './lib/ui/right-sidebar';
+import { StartupPlaceholder } from './lib/ui/startup-placeholder';
 import { TooltipProvider } from './lib/ui/tooltip';
 import { cn } from './utils/utils';
 
@@ -189,7 +190,7 @@ function AppRoot() {
     }
     return (
       <ThemeProvider>
-        <div className="flex h-screen items-center justify-center bg-surface" />
+        <StartupPlaceholder />
       </ThemeProvider>
     );
   }

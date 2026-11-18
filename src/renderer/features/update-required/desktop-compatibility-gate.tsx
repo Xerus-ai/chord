@@ -1,4 +1,5 @@
 import { Fragment, type ComponentType, type ReactNode } from 'react';
+import { StartupPlaceholder } from '@renderer/lib/ui/startup-placeholder';
 import { UpdateRequired } from './update-required';
 import { useDesktopCompatibility } from './use-desktop-compatibility';
 
@@ -36,7 +37,7 @@ export function DesktopCompatibilityGate({
   if (waiting) {
     return (
       <Frame>
-        <div className="flex h-screen items-center justify-center bg-surface" />
+        <StartupPlaceholder />
       </Frame>
     );
   }

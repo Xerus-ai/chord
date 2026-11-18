@@ -20,6 +20,8 @@ import '@renderer/index.css';
 
 let verdict: DesktopCompatibility = { state: 'unknown', checked: false, reason: 'not checked yet' };
 const calls: string[] = [];
+/** What update.check answers; by default the updater stays busy for as long as the test looks. */
+let checkAnswer: () => Promise<unknown> = () => new Promise(() => {});
 const listeners = new Map<string, (data: unknown) => void>();
 
 Object.assign(window, {
@@ -27,8 +29,7 @@ Object.assign(window, {
     invoke: async (channel: string) => {
       calls.push(channel);
       if (channel === 'app.getDesktopCompatibility') return verdict;
-      // The updater is busy for as long as the test looks.
-      if (channel === 'update.check') return new Promise(() => {});
+      if (channel === 'update.check') return checkAnswer();
       if (channel === 'update.openLatest') return undefined;
       throw new Error(`the gate asked the main process for ${channel}`);
     },
@@ -46,6 +47,7 @@ document.documentElement.classList.add('chord-dark');
 const { DesktopCompatibilityGate } = await import(
   '@renderer/features/update-required/desktop-compatibility-gate'
 );
+const { useUpdateStore } = await import('@renderer/lib/stores/update-store');
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -57,6 +59,9 @@ afterEach(() => {
   host = null;
   calls.length = 0;
   listeners.clear();
+  checkAnswer = () => new Promise(() => {});
+  // The updater store outlives a render: a check left pending must not carry over.
+  useUpdateStore.setState({ state: { status: 'idle' } });
 });
 
 function renderGate(): HTMLElement {
@@ -92,6 +97,10 @@ describe('the update-required gate', () => {
     expect(view.textContent).not.toContain('the workspace');
     expect(view.textContent).not.toContain('Update required');
     expect(calls).toContain('app.getDesktopCompatibility');
+    // Not an empty window to assistive tech: the wait is announced.
+    expect(view.querySelector('[aria-busy="true"] [role="status"]')?.textContent).toMatch(
+      /starting/i
+    );
   });
 
   it('a first reading of unknown (server down) lets the app through', async () => {
@@ -132,5 +141,32 @@ describe('the update-required gate', () => {
     if (!website) throw new Error('no Download from the website button');
     await userEvent.click(website);
     await vi.waitFor(() => expect(calls).toContain('update.openLatest'));
+  });
+
+  // An inactive updater answers a check with no result and sends no event: the
+  // screen must still say so (it looked dead), announce it, and put the download first.
+  it('a check that finds nothing says so, announces it, and makes the download the primary action', async () => {
+    verdict = { state: 'update_required', current: '1.0.0', minimum: '2.0.0' };
+    checkAnswer = async () => ({ success: true, result: null });
+    const view = renderGate();
+    const button = (name: RegExp) =>
+      [...view.querySelectorAll('button')].find((b) => name.test(b.textContent ?? ''));
+    const check = await vi.waitFor(() => {
+      const found = button(/check for updates/i);
+      if (!found) throw new Error('no Check for updates button');
+      return found;
+    });
+    const website = button(/download from the website/i)!;
+    const primaryFill = getComputedStyle(check).backgroundColor;
+    await userEvent.click(check);
+    await vi.waitFor(() => expect(view.textContent).toContain('No update was found'));
+    expect(view.querySelector('[aria-live="polite"]')?.textContent).toContain(
+      'No update was found'
+    );
+    // The buttons animate their colours (transition-colors): judge the settled fill.
+    await vi.waitFor(() => {
+      expect(getComputedStyle(website).backgroundColor).toBe(primaryFill);
+      expect(getComputedStyle(check).backgroundColor).not.toBe(primaryFill);
+    });
   });
 });
