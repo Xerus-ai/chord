@@ -242,4 +242,59 @@ process.stdin.on('data', async () => { await c.end(); process.exit(0); });`,
       expect(applied.stdout).toMatch(/\[migrate\] done/);
     }
   );
+
+  // devstation-mg6u.9: a statement blocked on a table lock gives up after 30 s instead of
+  // stalling the deploy; here the ledger table is held under ACCESS EXCLUSIVE.
+  it('migrate gives up on a table lock after the lock timeout', { timeout: 300_000 }, async () => {
+    resetDatabase();
+    const migrate = () =>
+      spawnSync('node', [TSX_CLI, MIGRATE_TS, '--unreleased'], {
+        cwd: temp('migrate-timeout-'),
+        encoding: 'utf8',
+        timeout: 150_000,
+        env: { ...process.env, DATABASE_URL },
+      });
+    const first = migrate();
+    expect(first.status, `${first.stdout}${first.stderr}`).toBe(0);
+
+    const holder = spawn(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import { Client, neonConfig } from '@neondatabase/serverless';
+import ws from 'ws';
+neonConfig.webSocketConstructor = ws;
+const c = new Client(process.env.U);
+await c.connect();
+await c.query('BEGIN');
+await c.query('LOCK TABLE _migrations IN ACCESS EXCLUSIVE MODE');
+console.log('locked');
+process.stdin.on('data', async () => { await c.query('ROLLBACK'); await c.end(); process.exit(0); });`,
+      ],
+      {
+        cwd: SERVER,
+        env: { ...process.env, U: DATABASE_URL },
+        stdio: ['pipe', 'pipe', 'inherit'],
+      }
+    );
+    await new Promise<void>((resolve, reject) => {
+      holder.stdout.on('data', (chunk: Buffer) => {
+        if (chunk.toString().includes('locked')) resolve();
+      });
+      holder.on('exit', (code) => reject(new Error(`table lock holder exited ${code}`)));
+    });
+    try {
+      const started = Date.now();
+      const blocked = migrate();
+      const out = `${blocked.stdout}${blocked.stderr}`;
+      expect(blocked.status, out).not.toBe(0);
+      expect(blocked.signal, 'killed by the spawn timeout, not stopped by lock_timeout').toBeNull();
+      expect(out).toMatch(/lock timeout/i);
+      expect(Date.now() - started).toBeLessThan(90_000);
+    } finally {
+      holder.stdin.write('release\n');
+      await new Promise((resolve) => holder.on('exit', resolve));
+    }
+  });
 });
