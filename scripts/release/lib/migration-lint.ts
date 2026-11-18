@@ -243,6 +243,12 @@ function maskLiterals(sql: string): { text: string; mask: string } {
 }
 
 /**
+ * A format() spec that inserts its argument as raw SQL: %s with any position
+ * (%1$s), flag and width (%-10s, %*s). %I and %L quote what they insert.
+ */
+const RAW_SPEC = /%(?:\d+\$)?-?(?:\d+|\*(?:\d+\$)?)?s/i;
+
+/**
  * Each EXECUTE whose argument is not one plain string literal (or format() of
  * one with no %s, which fills SQL from arguments the lint never reads):
  * concatenation, a variable, E'...' or parentheses hide the SQL it runs.
@@ -253,10 +259,11 @@ function dynamicExecutes(sql: string): string[] {
   const out: string[] = [];
   for (const m of mask.matchAll(/\bEXECUTE\b/gi)) {
     const rest = text.slice((m.index ?? 0) + m[0].length);
-    // A trigger's EXECUTE FUNCTION/PROCEDURE names a function: not dynamic SQL.
-    if (/^\s*(?:FUNCTION|PROCEDURE)\b/i.test(rest)) continue;
+    // A trigger's EXECUTE FUNCTION/PROCEDURE names a function, and GRANT/REVOKE
+    // EXECUTE ON grants a privilege: neither is dynamic SQL.
+    if (/^\s*(?:FUNCTION|PROCEDURE|ON)\b/i.test(rest)) continue;
     const literal = plain.exec(rest);
-    if (literal && !(literal[1] && /%s/i.test(literal[2]))) continue;
+    if (literal && !(literal[1] && RAW_SPEC.test(literal[2].replaceAll('%%', '')))) continue;
     out.push(`EXECUTE${rest.slice(0, 80)}`.replace(/\s+/g, ' ').trim());
   }
   return out;
