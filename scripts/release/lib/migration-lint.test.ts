@@ -1,8 +1,15 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { lintMigrations, MIGRATION_LINT_BASELINE, type MigrationFile } from './migration-lint.ts';
+import {
+  lintMigrations,
+  MIGRATION_LINT_BASELINE,
+  releasedTagsAt,
+  type MigrationFile,
+} from './migration-lint.ts';
 
 /**
  * Release preflight's migration lint (design C5, F8; devstation-5s42). During a
@@ -76,8 +83,8 @@ describe('migration lint', () => {
       );
 
     // Not destructive to a server still running the previous release.
-    expect(lint('ALTER TABLE a DROP CONSTRAINT a_b_fkey;')).toEqual([]);
-    expect(lint('DROP INDEX IF EXISTS a_b_idx;')).toEqual([]);
+    expect(lint('CREATE INDEX a_b_idx ON a (b);')).toEqual([]);
+    expect(lint('ALTER TABLE a ADD CONSTRAINT a_pk PRIMARY KEY (id);')).toEqual([]);
     expect(lint('ALTER TABLE a ALTER COLUMN title DROP NOT NULL;')).toEqual([]);
     expect(lint('ALTER TABLE a ALTER COLUMN status SET DEFAULT 0;')).toEqual([]);
     expect(lint('CREATE TABLE a (id text PRIMARY KEY, type text NOT NULL);')).toEqual([]);
@@ -123,6 +130,64 @@ describe('migration lint', () => {
       lint('ALTER TABLE a\n  DROP COLUMN IF EXISTS b,\n  DROP COLUMN IF EXISTS c;')
     ).toHaveLength(1);
     expect(lint('ALTER TABLE a ADD COLUMN d text, DROP COLUMN b;')).toHaveLength(1);
+  });
+
+  // devstation-mg6u.8: constraints the previous release's writes can violate, keys its ON
+  // CONFLICT clauses need, and DDL hidden in EXECUTE strings.
+  it('constraints, dropped keys and EXECUTE strings are flagged', () => {
+    const lint = (sql: string) =>
+      lintMigrations([file('0031_x.sql', sql)], { releasedTags: TAGS, after: 24 });
+
+    expect(lint('ALTER TABLE a ADD CONSTRAINT a_b_key UNIQUE (b);')).toHaveLength(1);
+    expect(lint('ALTER TABLE a ADD CONSTRAINT a_n_check CHECK (n > 0) NOT VALID;')).toHaveLength(1);
+    expect(
+      lint('ALTER TABLE a ADD CONSTRAINT a_t_fkey FOREIGN KEY (t) REFERENCES t (id);')
+    ).toHaveLength(1);
+    expect(lint('ALTER TABLE a ADD UNIQUE (b);')).toHaveLength(1);
+    expect(lint('CREATE UNIQUE INDEX IF NOT EXISTS a_b_uq ON a (b);')).toHaveLength(1);
+    expect(lint('CREATE UNIQUE INDEX CONCURRENTLY a_b_uq ON a (b);')).toHaveLength(1);
+
+    expect(lint('ALTER TABLE a DROP CONSTRAINT a_b_key;')).toHaveLength(1);
+    expect(lint('DROP INDEX IF EXISTS a_b_idx;')).toHaveLength(1);
+
+    expect(lint("DO $$ BEGIN EXECUTE 'ALTER TABLE a DROP COLUMN b'; END $$;")).toHaveLength(1);
+    expect(
+      lint("DO $$ BEGIN EXECUTE format('ALTER TABLE %I DROP COLUMN b', 'a'); END $$;")
+    ).toHaveLength(1);
+    // A literal that is not executed stays a literal.
+    expect(lint("INSERT INTO notes (body) VALUES ('ALTER TABLE a DROP COLUMN b');")).toEqual([]);
+    // The header still lets a contract migration through.
+    expect(
+      lintMigrations(
+        [file('0031_x.sql', '-- contract-for: v1.0.0\nALTER TABLE a DROP CONSTRAINT a_b_key;\n')],
+        { releasedTags: TAGS, after: 24 }
+      )
+    ).toEqual([]);
+  });
+
+  // devstation-mg6u.8: a contract-for tag counts only when the previous release already had it.
+  it('released tags are the tags in the history of --since', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'lint-tags-'));
+    try {
+      const git = (...args: string[]) =>
+        execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+      git('init', '-q');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'a');
+      git('tag', 'v1.0.0');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'b');
+      git('tag', 'v1.1.0');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'c');
+      git('tag', 'v1.2.0');
+
+      const at = releasedTagsAt('v1.1.0', git);
+      expect(at.sort()).toEqual(['v1.0.0', 'v1.1.0']);
+      const sql = '-- contract-for: v1.2.0\nALTER TABLE a DROP COLUMN b;\n';
+      expect(
+        lintMigrations([file('0031_x.sql', sql)], { releasedTags: at, after: 24 })
+      ).toHaveLength(1);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it('the shipped set passes at its baseline', () => {
