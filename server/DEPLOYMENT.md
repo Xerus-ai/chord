@@ -4,6 +4,29 @@ A runbook for standing up the Chord cloud sync server for your own small team
 (5-10 users). One VPS, no Kubernetes, no horizontal scaling — that's a later
 problem. Follow this top to bottom.
 
+**Chord's own box runs this runbook as scripts, in `server/deploy/`:**
+
+- `bootstrap.sh` (root, once, safe to rerun) installs Caddy, Node at `.nvmrc`'s
+  version, the `chord` and `deploy` users, `/opt/chord/{releases,shared,bin}`,
+  the `chord-sync` unit (`chord-sync.service`), the `Caddyfile` and the
+  sudoers line. Its last line counts what it changed.
+- `deploy.sh <tag> <sha>` is the deploy key's forced command. It takes a
+  `git archive` of the tag on stdin, then installs, builds, migrates, flips
+  `/opt/chord/current` and checks that `/health` reports the tag. If the
+  release is unhealthy, it flips back. It keeps the newest 3 releases. In use:
+  `git archive --format=tar <tag> | ssh deploy@<host> deploy <tag> <sha>`.
+- `box-check.sh` is the live check: health over https, the two services, a
+  bootstrap rerun that changes nothing, and the deploy key refused a shell.
+- `/opt/chord/shared/.env` holds the section 3 values. Leave out `PORT`,
+  `HOCUSPOCUS_PORT` and `NODE_ENV`: the unit sets them, because Caddy owns
+  port 1235 and Hocuspocus listens behind it on 1236.
+- `/health` returns `version` (the deployed tag; `null` outside a deploy),
+  `commit` and `epoch`.
+- Release preflight runs `pnpm run lint:migrations`. A migration that drops,
+  renames or retypes a column, or adds a `NOT NULL` column without a
+  `DEFAULT`, needs a `-- contract-for: vX.Y.Z` header naming a released tag
+  (expand/contract).
+
 ## 1. What you're deploying
 
 One Node process (`server/src/index.ts`) that serves REST + WebSocket on

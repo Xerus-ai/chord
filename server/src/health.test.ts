@@ -37,4 +37,27 @@ describe('/health', () => {
     expect(health.min_desktop_version).toBe(MIN_DESKTOP_VERSION);
     expect(MIN_DESKTOP_VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
+
+  /**
+   * devstation-5s42: deploy.sh asserts /health's version equals the tag it
+   * installed, so a server that reports a hardcoded version (the old '0.1.0')
+   * would pass a deploy of the wrong release, and one that invents a version
+   * outside a deploy would hide that nothing was deployed.
+   */
+  it('health reports the release it runs', async () => {
+    const { SERVER_EPOCH } = await import('./ws/connection-manager');
+    vi.stubEnv('CHORD_RELEASE_TAG', 'v1.2.3-canary.4');
+    vi.stubEnv('CHORD_RELEASE_COMMIT', 'a'.repeat(40));
+    const deployed = ServerHealthSchema.parse(await (await fetch(`${base}/health`)).json());
+    expect(deployed.version).toBe('v1.2.3-canary.4');
+    expect(deployed.commit).toBe('a'.repeat(40));
+    expect(deployed.epoch).toBe(SERVER_EPOCH);
+    expect(typeof SERVER_EPOCH).toBe('string');
+
+    vi.stubEnv('CHORD_RELEASE_TAG', '');
+    vi.stubEnv('CHORD_RELEASE_COMMIT', '');
+    const undeployed = ServerHealthSchema.parse(await (await fetch(`${base}/health`)).json());
+    expect(undeployed.version).toBeNull();
+    expect(undeployed.commit).toBeNull();
+  });
 });

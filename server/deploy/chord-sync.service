@@ -1,0 +1,39 @@
+# The sync server (design C5, devstation-5s42), installed by bootstrap.sh.
+# deploy.sh flips /opt/chord/current and restarts this unit; release.env names
+# the release it runs, which /health reports.
+[Unit]
+Description=Chord sync server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chord
+Group=chord
+WorkingDirectory=/opt/chord/current/server
+# Caddy owns the public ports (443 and 1235); the process listens behind it.
+Environment=NODE_ENV=production PORT=1234 HOCUSPOCUS_PORT=1236
+EnvironmentFile=/opt/chord/shared/.env
+EnvironmentFile=/opt/chord/shared/release.env
+ExecStart=/opt/node/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/chord/shared/hocuspocus
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+# Not MemoryDenyWriteExecute: V8's JIT needs writable executable memory.
+
+[Install]
+WantedBy=multi-user.target

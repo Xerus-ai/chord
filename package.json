@@ -33,8 +33,9 @@
     "run:docker-ssh": "docker compose up --build -d",
     "clean": "rm -rf node_modules dist",
     "reset": "pnpm run clean && pnpm install",
-    "lint": "eslint . --cache --cache-strategy content --cache-location node_modules/.cache/eslint/.eslintcache && pnpm run lint:tokens && pnpm run format:check",
+    "lint": "eslint . --cache --cache-strategy content --cache-location node_modules/.cache/eslint/.eslintcache && pnpm run lint:tokens && pnpm run lint:migrations && pnpm run format:check",
     "lint:tokens": "node scripts/token-audit.mjs",
+    "lint:migrations": "node --experimental-strip-types scripts/release/migration-lint.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm run build:protocol && tsc --noEmit && tsc --noEmit -p scripts/release/tsconfig.json && tsc --noEmit -p server"
