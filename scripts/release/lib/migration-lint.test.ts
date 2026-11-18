@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -164,10 +164,20 @@ describe('migration lint', () => {
         "ALTER TABLE a DROP CONSTRAINT IF EXISTS a_status_check;\nALTER TABLE a ADD CONSTRAINT a_status_check CHECK (status IN ('x', 'y'));"
       )
     ).toHaveLength(2);
-    // format() fills %s from arguments the lint never reads.
+    // format() fills %s from arguments the lint never reads, positional or with a width too.
     expect(
       lint("DO $$ BEGIN EXECUTE format('ALTER TABLE t %s', 'DROP COLUMN c'); END $$;")
     ).toHaveLength(1);
+    for (const spec of ['%1$s', '%-10s', '%10s', '%*s', '%2$-5s'])
+      expect(
+        lint(`DO $$ BEGIN EXECUTE format('ALTER TABLE t ${spec}', 'DROP COLUMN c'); END $$;`),
+        spec
+      ).toHaveLength(1);
+    // %% is a literal percent sign, not a spec.
+    expect(lint("DO $$ BEGIN EXECUTE format('SELECT 100%%s'); END $$;")).toEqual([]);
+    // GRANT / REVOKE EXECUTE ON a function is a privilege, not dynamic SQL.
+    expect(lint('GRANT EXECUTE ON FUNCTION touch() TO app;')).toEqual([]);
+    expect(lint('REVOKE EXECUTE ON FUNCTION touch() FROM PUBLIC;')).toEqual([]);
     // A '--' inside a literal does not hide the EXECUTE after it.
     expect(lint("DO $$ BEGIN PERFORM '--'; EXECUTE s; END $$;")).toHaveLength(1);
     // The word EXECUTE inside a literal is not an EXECUTE.
@@ -224,6 +234,44 @@ describe('migration lint', () => {
       expect(
         lintMigrations([file('0031_x.sql', sql)], { releasedTags: at, after: 24 })
       ).toHaveLength(1);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  // The CLI passes releasedTagsAt(--since), not every local tag: a tag cut after the previous
+  // release cannot vouch for a migration that release would run beside.
+  it('the CLI with --since refuses a contract-for tag cut after it', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'lint-cli-'));
+    try {
+      const git = (...args: string[]) =>
+        execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+      const commit = (m: string) =>
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', m);
+      const dir = join(repo, 'server', 'src', 'db', 'migrations');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, '0001_a.sql'), 'CREATE TABLE a (b text);\n');
+      git('init', '-q');
+      git('add', '.');
+      commit('a');
+      git('tag', 'v1.1.0');
+      commit('b');
+      git('tag', 'v1.2.0');
+      writeFileSync(
+        join(dir, '0002_b.sql'),
+        '-- contract-for: v1.2.0\nALTER TABLE a DROP COLUMN b;\n'
+      );
+      const cli = join(dirname(fileURLToPath(import.meta.url)), '..', 'migration-lint.ts');
+      const r = spawnSync(
+        process.execPath,
+        ['--experimental-strip-types', cli, '--since', 'v1.1.0'],
+        {
+          cwd: repo,
+          encoding: 'utf8',
+        }
+      );
+      expect(r.status, r.stdout + r.stderr).toBe(1);
+      expect(r.stdout + r.stderr).toMatch(/0002_b\.sql/);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
