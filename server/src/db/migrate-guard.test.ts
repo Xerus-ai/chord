@@ -101,6 +101,14 @@ describe('migrate CLI write guard', { timeout: CASE_TIMEOUT_MS }, () => {
     }
   });
 
+  // devstation-mg6u.9: the lock wait comes from the environment; a bad value is refused up front.
+  it('refuses a CHORD_MIGRATE_LOCK_WAIT_S that is not whole seconds, before connecting', async () => {
+    const run = await runMigrate(['--status'], { CHORD_MIGRATE_LOCK_WAIT_S: '-1' });
+    expect(run.code).not.toBe(0);
+    expect(run.output).toMatch(/CHORD_MIGRATE_LOCK_WAIT_S expects whole seconds/);
+    expect(run.connected).toBe(false);
+  });
+
   it.each([
     ['--status', ['--status'], {}],
     ['a release tag', [], { CHORD_RELEASE_TAG: 'v9.9.9' }],

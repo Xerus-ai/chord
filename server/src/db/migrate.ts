@@ -43,6 +43,33 @@ neonConfig.webSocketConstructor = ws;
 // Serializes concurrent runners (two deploys, a deploy racing a developer)
 // against one database. Session-scoped, so it is held for exactly this run.
 const ADVISORY_LOCK_KEY = 4919170251;
+// A runner that finds the lock taken polls this long, then refuses naming the
+// holder, instead of queueing forever behind a run that may never finish.
+const DEFAULT_LOCK_WAIT_S = 120;
+// A migration statement blocked on a table lock fails after this, rolling its
+// file back, rather than stalling the deploy and the queries queued behind it.
+const STATEMENT_LOCK_TIMEOUT = '30s';
+
+async function acquireRunLock(client: Client, waitSeconds: number): Promise<void> {
+  const deadline = Date.now() + waitSeconds * 1000;
+  for (;;) {
+    const { rows } = await client.query<{ locked: boolean }>(
+      'SELECT pg_try_advisory_lock($1) AS locked',
+      [ADVISORY_LOCK_KEY]
+    );
+    if (rows[0]?.locked) return;
+    if (Date.now() >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  const { rows } = await client.query<{ pid: number }>(
+    "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1 AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND ((classid::bigint << 32) | objid::bigint) = $1",
+    [ADVISORY_LOCK_KEY]
+  );
+  const holder = rows[0] ? `held by pid ${rows[0].pid}` : 'held by another session';
+  throw new Error(
+    `[migrate] the migration lock is ${holder} after ${waitSeconds} s: another migrate or deploy is running against this database`
+  );
+}
 
 const LEDGER_DDL = `
   CREATE TABLE IF NOT EXISTS _migrations (
@@ -54,6 +81,8 @@ const LEDGER_DDL = `
 
 export interface MigrateOptions {
   connectionString: string;
+  /** How long to wait for another runner's lock before refusing (default 120 s). */
+  lockWaitSeconds?: number;
   /** Numeric prefix, e.g. `10`. Records 0000..N as applied without running. */
   baselineThrough?: number;
   /** Report only; no ledger writes, no migrations applied. */
@@ -141,7 +170,8 @@ export async function runMigrations(options: MigrateOptions): Promise<MigrateRes
   await client.connect();
 
   try {
-    await client.query('SELECT pg_advisory_lock($1)', [ADVISORY_LOCK_KEY]);
+    await acquireRunLock(client, options.lockWaitSeconds ?? DEFAULT_LOCK_WAIT_S);
+    await client.query(`SET lock_timeout = '${STATEMENT_LOCK_TIMEOUT}'`);
     await client.query(LEDGER_DDL);
 
     const applied = await readLedger(client);
@@ -181,6 +211,15 @@ export async function runMigrations(options: MigrateOptions): Promise<MigrateRes
   } finally {
     await client.end();
   }
+}
+
+function parseLockWait(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const seconds = Number(value);
+  if (!Number.isInteger(seconds) || seconds < 0) {
+    throw new Error(`[migrate] CHORD_MIGRATE_LOCK_WAIT_S expects whole seconds, got: ${value}`);
+  }
+  return seconds;
 }
 
 function parseBaselineArg(value: string | undefined): number {
@@ -224,6 +263,7 @@ async function main(argv: string[]): Promise<void> {
   const baselineIndex = argv.indexOf('--baseline');
   const options: MigrateOptions = {
     connectionString,
+    lockWaitSeconds: parseLockWait(process.env.CHORD_MIGRATE_LOCK_WAIT_S),
     statusOnly: argv.includes('--status'),
     ...(baselineIndex === -1 ? {} : { baselineThrough: parseBaselineArg(argv[baselineIndex + 1]) }),
   };

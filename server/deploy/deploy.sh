@@ -26,9 +26,11 @@
 # the live tag succeeds without changing anything.
 #
 # Exit: 0 live, 1 failed (the previous release is live; on a first deploy there
-# is none), 2 refused request, 75 another deploy holds the lock.
+# is none; or the new release is live and only the pnpm store prune after it
+# failed, which deploy.log names), 2 refused request, 75 another deploy holds
+# the lock.
 #
-# DEPLOY_ROOT, DEPLOY_PREPARE, DEPLOY_MIGRATE, DEPLOY_RESTART, DEPLOY_HEALTH_URL
+# DEPLOY_ROOT, DEPLOY_PREPARE, DEPLOY_MIGRATE, DEPLOY_STORE_PRUNE, DEPLOY_RESTART, DEPLOY_HEALTH_URL
 # and DEPLOY_HEALTH_INTERVAL exist for scripts/release/deploy-sh.test.ts; sshd
 # passes no environment through a restrict key, so the forced command always
 # runs with the defaults.
@@ -177,6 +179,11 @@ migrate_release() {
   return 1
 }
 
+# shellcheck disable=SC2329 # called through run_step
+store_prune() {
+  timeout 600 pnpm store prune
+}
+
 # Runs a step in the release: the DEPLOY_* override when set, else the function.
 run_step() {
   local override=$1 fn=$2
@@ -248,6 +255,12 @@ flip "$dest"
 if restart && wait_healthy "$tag"; then
   log "live"
   prune
+  # The deploy user's pnpm store only grows with each release's install; a
+  # failed prune fails the deploy, but the release it made live stays live.
+  if ! run_step "${DEPLOY_STORE_PRUNE-}" store_prune; then
+    log "store prune failed; $tag is live"
+    exit 1
+  fi
   exit 0
 fi
 

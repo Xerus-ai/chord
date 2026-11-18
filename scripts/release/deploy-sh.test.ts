@@ -130,6 +130,8 @@ async function box(): Promise<Box> {
         DEPLOY_RESTART: restart,
         DEPLOY_HEALTH_URL: `http://127.0.0.1:${port}/health`,
         DEPLOY_HEALTH_INTERVAL: '0.2',
+        // Records each run, so a case can see the store prune happen after `live`.
+        DEPLOY_STORE_PRUNE: `echo store-pruned >> '${r}/shared/deploy.log'`,
         ...extra,
       },
     });
@@ -227,5 +229,60 @@ describe('deploy.sh', () => {
     expect(current(root)).toBe('v1.4.0-canary.1');
     // The newest three releases are kept, the live one among them.
     expect(readdirSync(releases).sort()).toEqual(['v1.2.0', 'v1.3.0', 'v1.4.0-canary.1']);
+  });
+
+  // devstation-mg6u.9: the deploy user's pnpm store only grew; it is pruned after each live
+  // release, and a prune that fails fails the deploy without taking the release down.
+  it(
+    'prunes the pnpm store after a live release; a failed prune exits 1 and stays live',
+    { timeout: 120_000 },
+    async () => {
+      const { root, run } = await box();
+      mkdirSync(join(root, 'shared'), { recursive: true });
+      writeFileSync(join(root, 'shared', '.env'), 'MIGRATE_DATABASE_URL=postgres://unused\n');
+      const ok = run(`deploy v2.0.0 ${SHA}`, releaseTar());
+      expect(ok.code, ok.out).toBe(0);
+      const log = readFileSync(join(root, 'shared', 'deploy.log'), 'utf8');
+      expect(log.indexOf('store-pruned'), log).toBeGreaterThan(log.lastIndexOf('live'));
+
+      const failed = run(`deploy v2.1.0 ${SHA}`, releaseTar(), { DEPLOY_STORE_PRUNE: 'exit 9' });
+      expect(failed.code, failed.out).toBe(1);
+      expect(current(root)).toBe('v2.1.0');
+      expect(readFileSync(join(root, 'shared', 'deploy.log'), 'utf8')).toMatch(
+        /store prune failed/
+      );
+    }
+  );
+});
+
+// devstation-mg6u.9: the Caddyfile names no host; bootstrap renders it from CHORD_API_HOST.
+describe('render-caddyfile.sh', () => {
+  const RENDER = join(HERE, '..', '..', 'server', 'deploy', 'render-caddyfile.sh');
+  const TEMPLATE = join(HERE, '..', '..', 'server', 'deploy', 'Caddyfile');
+  const render = (env: Record<string, string>) => {
+    const out = join(temp('caddy-'), 'Caddyfile');
+    const base = { ...process.env };
+    delete base.CHORD_API_HOST;
+    const res = spawnSync(BASH, [RENDER, TEMPLATE, out], {
+      encoding: 'utf8',
+      env: { ...base, ...env },
+    });
+    return { code: res.status, out: `${res.stdout}${res.stderr}`, file: out };
+  };
+
+  it('refuses without CHORD_API_HOST and writes nothing', () => {
+    const res = render({});
+    expect(res.code, res.out).not.toBe(0);
+    expect(res.out).toMatch(/CHORD_API_HOST/);
+    expect(existsSync(res.file)).toBe(false);
+  });
+
+  it('writes the given host on both listeners and no placeholder', () => {
+    const res = render({ CHORD_API_HOST: 'api.example.test' });
+    expect(res.code, res.out).toBe(0);
+    const text = readFileSync(res.file, 'utf8');
+    expect(text).toMatch(/^api\.example\.test \{$/m);
+    expect(text).toMatch(/^api\.example\.test:1235 \{$/m);
+    expect(text).not.toMatch(/CHORD_API_HOST/);
   });
 });
