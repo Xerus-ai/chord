@@ -1,5 +1,4 @@
-# Cuts a release from a merged release PR (devstation-pqub, design C4; plan
-# .command-center/.context/plans/2026-11-02-feat-release-workflow-release-pr-plan.md).
+# Cuts a release from a merged release PR (devstation-pqub).
 # /release merges a PR whose one commit is `chore(release): vX.Y.Z (<bead>)`. When CI passes
 # on that merge, this workflow runs: preflight decides from the commit whether it is a release
 # (release-preflight.ts), the tag is created with the release app's token (the only bypass of
