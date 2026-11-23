@@ -336,8 +336,14 @@ describe('server traffic follows the version verdict', () => {
     // The inbox fetches only for the work items this machine holds.
     await insertItems(V);
     stopServerSenders();
+    const upgradesAtRestart = upgrades;
     startServerSenders();
     expect(await verdict('0.1.0')).toBe('supported');
+    // The restarted device socket is live, so its stop below is what keeps it down.
+    await vi.waitFor(() => expect(upgrades).toBeGreaterThan(upgradesAtRestart), {
+      timeout: 5_000,
+      interval: 50,
+    });
     requests = [];
     commandInboxService.kick();
     await vi.waitFor(() => expect(fetches().length).toBeGreaterThan(0), {
