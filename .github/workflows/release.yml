@@ -222,6 +222,7 @@ jobs:
           if-no-files-found: error
           path: |
             release/*.yml
+            !release/builder-debug.yml
             release/*.blockmap
             release/*.dmg
             release/*.zip

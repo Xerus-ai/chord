@@ -14,7 +14,7 @@ import { parseReleaseTag } from './release-plan.ts';
  * The files a release commit may touch: the harness's `release.version_files`
  * (.command-center/.workflows/harness.json), which the release gate holds the commit to as well.
  */
-export const RELEASE_VERSION_FILES = ['package.json', 'server/package.json', 'CHANGELOG.md'];
+const RELEASE_VERSION_FILES = ['package.json', 'server/package.json', 'CHANGELOG.md'];
 
 /** What the server deploy depends on: its own tree and the wire contract it serves (F7). */
 const SERVER_PATHS = ['server', 'packages/protocol'];
@@ -40,20 +40,23 @@ export type ReleaseDecision =
 const git = (cwd: string, args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
-function gitOrNull(cwd: string, args: string[]): string | null {
-  try {
-    return git(cwd, args);
-  } catch {
-    return null;
-  }
-}
-
 const showFile = (cwd: string, ref: string, path: string) => git(cwd, ['show', `${ref}:${path}`]);
+/** The file at `ref`, or null when `ref` has no such path; a missing ref or object throws. */
+const showFileOrNull = (cwd: string, ref: string, path: string) =>
+  git(cwd, ['ls-tree', '--name-only', ref, '--', path]) === '' ? null : showFile(cwd, ref, path);
 const readVersion = (cwd: string, ref: string, path: string): string =>
   (JSON.parse(showFile(cwd, ref, path)) as { version: string }).version;
 
-const tagCommit = (cwd: string, tag: string) =>
-  gitOrNull(cwd, ['rev-parse', '-q', '--verify', `refs/tags/${tag}^{commit}`]);
+/** The commit the tag points at, or null when there is no such tag; a broken tag throws. */
+function tagCommit(cwd: string, tag: string): string | null {
+  const ref = `refs/tags/${tag}`;
+  if (git(cwd, ['for-each-ref', '--format=%(objectname)', ref]) === '') return null;
+  return git(cwd, ['rev-parse', '--verify', `${ref}^{commit}`]);
+}
+
+/** The first parent, or null for a root commit; a missing object throws. */
+const firstParent = (cwd: string, head: string): string | null =>
+  git(cwd, ['rev-list', '--parents', '-n', '1', head]).split(' ')[1] ?? null;
 
 /** Release tags rank by version; a canary sorts below its stable release. */
 function rank(tag: string): number[] {
@@ -116,7 +119,7 @@ function touchesServer(cwd: string, previous: string, head: string): boolean {
   return changed.some((path) => {
     if (path !== 'server/package.json') return true;
     const withoutVersion = (ref: string) => {
-      const text = gitOrNull(cwd, ['show', `${ref}:${path}`]);
+      const text = showFileOrNull(cwd, ref, path);
       if (text === null) return null;
       const { version: _version, ...rest } = JSON.parse(text) as { version: string };
       return JSON.stringify(rest);
@@ -134,12 +137,18 @@ function readMinRaised(cwd: string, sha: string, previous: string | null, versio
     );
   }
   if (previous === null) return false;
-  const before = gitOrNull(cwd, ['show', `${previous}:${MIN_DESKTOP_FILE}`]);
+  const before = showFileOrNull(cwd, previous, MIN_DESKTOP_FILE);
   return before === null || readMinDesktopVersion(before) !== min;
 }
 
 /** The decision for `sha`; throws, naming the check, when a release fails one. */
 export function readReleaseDecision(cwd: string, sha: string): ReleaseDecision {
+  // Without history a parent or tag reads as missing, the same as a root commit or no release.
+  if (git(cwd, ['rev-parse', '--is-shallow-repository']) === 'true') {
+    throw new Error(
+      'preflight needs the full history and tags, not a shallow clone (checkout fetch-depth: 0)'
+    );
+  }
   const head = git(cwd, ['rev-parse', '--verify', `${sha}^{commit}`]);
   const version = readVersion(cwd, head, 'package.json');
   const tag = `v${version}`;
@@ -148,7 +157,7 @@ export function readReleaseDecision(cwd: string, sha: string): ReleaseDecision {
     return { release: false, reason: `${tag} is already tagged at ${tagged.slice(0, 12)}` };
   }
   if (tagged === null) {
-    const parent = gitOrNull(cwd, ['rev-parse', '-q', '--verify', `${head}^1`]);
+    const parent = firstParent(cwd, head);
     if (parent !== null && readVersion(cwd, parent, 'package.json') === version) {
       return {
         release: false,
