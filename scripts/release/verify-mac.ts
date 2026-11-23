@@ -1,28 +1,25 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { parseArgs } from 'node:util';
 import { RELEASE_DIR } from './lib/config.ts';
 import { exec, execOrNull } from './lib/exec.ts';
 import { fail, info, step, warn } from './lib/log.ts';
 import { macNativeModule } from './lib/mac-native-module.ts';
+import { readVerifyMacOptions, type VerifyMacOptions } from './lib/verify-mac-options.ts';
 
 if (process.platform !== 'darwin') {
   console.log('Not macOS — skipping verification.');
   process.exit(0);
 }
 
-const { values } = parseArgs({
-  options: {
-    'expected-team-id': { type: 'string' },
-    // Builds are unsigned until signing is provisioned (D8): the arch checks run, the
-    // signature checks are skipped, saying so.
-    unsigned: { type: 'boolean', default: false },
-  },
-  strict: true,
-});
+function readOptions(): VerifyMacOptions {
+  try {
+    return readVerifyMacOptions(process.argv.slice(2));
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
 
-const expectedTeamId = values['expected-team-id'];
-if (values.unsigned && expectedTeamId) fail('--unsigned and --expected-team-id contradict');
+const { codesign, expectedTeamId } = readOptions();
 
 const appBundles = readdirSync(RELEASE_DIR)
   .filter((d) => d.startsWith('mac'))
@@ -80,7 +77,7 @@ for (const appDir of appBundles) {
     info(`CFBundleIdentifier: ${bid}`);
   }
 
-  if (values.unsigned) {
+  if (!codesign) {
     warn(`UNSIGNED (D8): skipped the codesign checks of ${appDir}`);
   } else {
     exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
