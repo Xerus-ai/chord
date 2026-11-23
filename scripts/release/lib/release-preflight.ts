@@ -28,7 +28,7 @@ export type ReleaseDecision =
       /** The tag already points at this commit: a rerun of the same release. */
       rerun: boolean;
       tag: string;
-      /** The newest release tag of any channel this commit contains (migration lint's base). */
+      /** The newest release tag of any channel this commit contains. */
       previous: string | null;
       channel: 'stable' | 'canary';
       /**
@@ -38,6 +38,11 @@ export type ReleaseDecision =
       server: boolean;
       /** MIN_DESKTOP_VERSION differs from the server's: the server deploys after the probe. */
       minDesktopRaised: boolean;
+      /**
+       * The tag the live server runs (null: none). The migration lint's base: after a failed
+       * deploy, a contract migration must stay safe for the release still live, not `previous`.
+       */
+      deployed: string | null;
     };
 
 const git = (cwd: string, args: string[]) =>
@@ -208,6 +213,7 @@ export function readReleaseDecision(
     channel: parseReleaseTag(tag).canary === null ? 'stable' : 'canary',
     server,
     minDesktopRaised: readMinRaised(cwd, head, deployed ?? previous, version),
+    deployed,
   };
 }
 
@@ -222,6 +228,7 @@ export function formatReleaseOutputs(decision: ReleaseDecision): string {
     ['channel', decision.channel],
     ['server', decision.server],
     ['min_desktop_raised', decision.minDesktopRaised],
+    ['deployed', decision.deployed],
   ];
   return outputs.map(([key, value]) => `${key}=${value ?? ''}\n`).join('');
 }
