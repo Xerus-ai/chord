@@ -294,6 +294,32 @@ describe('readReleaseDecision: what the range carries', () => {
   });
 });
 
+describe('readReleaseDecision: a git that cannot answer', () => {
+  // A checkout without history has no tags and no parents: read as missing, a merge on top of
+  // v1.0.0 would look like the first release of v1.0.0.
+  it('refuses a shallow clone, naming the full history it needs', () => {
+    const r = createReleasedRepo();
+    const shallow = mkdtempSync(join(tmpdir(), 'release-preflight-shallow-'));
+    temps.push(shallow);
+    execFileSync('git', ['clone', '-q', '--depth', '1', `file://${r.repo}`, shallow]);
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: shallow, encoding: 'utf8' });
+
+    expect(() => readReleaseDecision(shallow, head.trim())).toThrow(
+      /shallow clone.*fetch-depth: 0/
+    );
+  });
+
+  it('a git failure is an error, not a missing tag or parent', () => {
+    const r = createReleasedRepo();
+    const head = r.git('rev-parse', 'HEAD');
+    // The tag's object is gone: git exits 128, which is not "no such tag".
+    const tagObject = r.git('rev-parse', 'refs/tags/v1.0.0');
+    rmSync(join(r.repo, '.git', 'objects', tagObject.slice(0, 2), tagObject.slice(2)));
+
+    expect(() => readReleaseDecision(r.repo, head)).toThrow(/git rev-parse .*v1\.0\.0/);
+  });
+});
+
 describe('formatReleaseOutputs', () => {
   it('writes every output a later job reads, and only release=false when it is not a release', () => {
     expect(

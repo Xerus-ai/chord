@@ -200,6 +200,29 @@ describe('release.yml checks', () => {
     expect(runs(jobs.publish)).toContain(`--notes-file "${notes}"`);
   });
 
+  it("uploads the update manifests but not electron-builder's debug file, which publish would make public", () => {
+    const upload = jobs.build.steps.find((step) =>
+      step.uses?.startsWith('actions/upload-artifact@')
+    );
+    const patterns = String(upload?.with?.path ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '');
+    // upload-artifact's globs as these patterns use them: * within one folder, ! excludes.
+    const matches = (glob: string, file: string) =>
+      new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`).test(
+        file
+      );
+    const uploaded = (file: string) =>
+      patterns.some((p) => !p.startsWith('!') && matches(p, file)) &&
+      !patterns.some((p) => p.startsWith('!') && matches(p.slice(1), file));
+
+    expect(uploaded('release/builder-debug.yml')).toBe(false);
+    for (const manifest of ['latest.yml', 'latest-mac.yml', 'latest-linux.yml', 'canary.yml']) {
+      expect(uploaded(`release/${manifest}`), manifest).toBe(true);
+    }
+  });
+
   it('the build bakes every packaged-app variable, so the app it ships can sign in', () => {
     const env = jobs.build.env ?? {};
 
