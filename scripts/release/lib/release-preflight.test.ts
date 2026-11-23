@@ -84,7 +84,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toEqual({
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toEqual({
       release: true,
       rerun: false,
       tag: 'v1.1.0',
@@ -102,7 +102,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
     ]);
     r.tag('v1.1.0', head);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({
       release: true,
       rerun: true,
       tag: 'v1.1.0',
@@ -118,7 +118,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
     r.tag('v1.1.0', released);
     const head = r.mergePr('fix/b', [['fix(main): b (t-3)', { 'src/main/b.ts': 'export {};\n' }]]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({ release: false });
+    expect(readReleaseDecision(r.repo, head, 'v1.1.0')).toMatchObject({ release: false });
   });
 
   it('a version that never moved and was never tagged (main before its first release) is not a release', () => {
@@ -127,7 +127,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       ['feat(main): a (t-2)', { 'src/main/a.ts': 'export {};\n' }],
     ]);
 
-    const decision = readReleaseDecision(r.repo, head);
+    const decision = readReleaseDecision(r.repo, head, null);
 
     expect(decision.release).toBe(false);
     expect(decision).toMatchObject({ reason: expect.stringContaining('v0.1.0') });
@@ -139,7 +139,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       [RELEASE('v1.0.0-canary.1'), releaseFiles('1.0.0-canary.1')],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({
+    expect(readReleaseDecision(r.repo, head, null)).toMatchObject({
       release: true,
       tag: 'v1.0.0-canary.1',
       previous: null,
@@ -158,7 +158,7 @@ describe('readReleaseDecision: the release commit', () => {
       ],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(
       /no commit 'chore\(release\): v1\.1\.0 \(<bead>\)'/
     );
   });
@@ -172,7 +172,7 @@ describe('readReleaseDecision: the release commit', () => {
       ],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/src\/main\/sneaky\.ts/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(/src\/main\/sneaky\.ts/);
   });
 
   it('refuses two release commits for one tag', () => {
@@ -182,7 +182,7 @@ describe('readReleaseDecision: the release commit', () => {
       [RELEASE('v1.1.0'), { 'CHANGELOG.md': changelog('v1.1.0', 'v1.0.0') + '\n' }],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/2 commits/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(/2 commits/);
   });
 });
 
@@ -196,7 +196,9 @@ describe('readReleaseDecision: the version files', () => {
       ],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/server\/package\.json.*1\.0\.1/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(
+      /server\/package\.json.*1\.0\.1/
+    );
   });
 
   it('refuses an off-grammar version (1.0.0-rc1)', () => {
@@ -205,7 +207,7 @@ describe('readReleaseDecision: the version files', () => {
       [RELEASE('v1.1.0-rc1'), releaseFiles('1.1.0-rc1', ['v1.0.0'])],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/not a release tag/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(/not a release tag/);
   });
 
   it('refuses a CHANGELOG without the section for the tag', () => {
@@ -214,7 +216,7 @@ describe('readReleaseDecision: the version files', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.0.0'])],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(
       /CHANGELOG\.md has no section for v1\.1\.0/
     );
   });
@@ -231,7 +233,7 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({ server: true });
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({ server: true });
   });
 
   it('a packages/protocol change deploys the server', () => {
@@ -244,7 +246,7 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.0.1'), releaseFiles('1.0.1', ['v1.0.1', 'v1.0.0'])],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({
       server: true,
       minDesktopRaised: false,
     });
@@ -258,7 +260,7 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0-canary.2'), releaseFiles('1.1.0-canary.2', ['v1.1.0-canary.2', 'v1.0.0'])],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({
+    expect(readReleaseDecision(r.repo, head, 'v1.1.0-canary.1')).toMatchObject({
       tag: 'v1.1.0-canary.2',
       previous: 'v1.1.0-canary.1',
       channel: 'canary',
@@ -275,7 +277,7 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    expect(readReleaseDecision(r.repo, head)).toMatchObject({
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({
       server: true,
       minDesktopRaised: true,
     });
@@ -290,7 +292,9 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/MIN_DESKTOP_VERSION 1\.2\.0/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(
+      /MIN_DESKTOP_VERSION 1\.2\.0/
+    );
   });
 });
 
@@ -304,7 +308,7 @@ describe('readReleaseDecision: a git that cannot answer', () => {
     execFileSync('git', ['clone', '-q', '--depth', '1', `file://${r.repo}`, shallow]);
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: shallow, encoding: 'utf8' });
 
-    expect(() => readReleaseDecision(shallow, head.trim())).toThrow(
+    expect(() => readReleaseDecision(shallow, head.trim(), null)).toThrow(
       /shallow clone.*fetch-depth: 0/
     );
   });
@@ -316,7 +320,48 @@ describe('readReleaseDecision: a git that cannot answer', () => {
     const tagObject = r.git('rev-parse', 'refs/tags/v1.0.0');
     rmSync(join(r.repo, '.git', 'objects', tagObject.slice(0, 2), tagObject.slice(2)));
 
-    expect(() => readReleaseDecision(r.repo, head)).toThrow(/git rev-parse .*v1\.0\.0/);
+    expect(() => readReleaseDecision(r.repo, head, 'v1.0.0')).toThrow(/git rev-parse .*v1\.0\.0/);
+  });
+});
+
+describe('readReleaseDecision: the server range starts at the tag the server runs', () => {
+  /** v1.1.0 (a server migration) tagged but its deploy failed, then a renderer-only v1.1.1. */
+  function failedDeployThenRenderer() {
+    const r = createReleasedRepo();
+    r.mergePr('feat/m', [['feat(server): m (t-5)', { 'server/src/m.sql': 'select 1;\n' }]]);
+    r.tag(
+      'v1.1.0',
+      r.mergePr('release/v1.1.0', [[RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0'])]])
+    );
+    r.mergePr('fix/r', [['fix(renderer): r (t-6)', { 'src/renderer/r.tsx': 'export {};\n' }]]);
+    const head = r.mergePr('release/v1.1.1', [
+      [RELEASE('v1.1.1'), releaseFiles('1.1.1', ['v1.1.1'])],
+    ]);
+    return { r, head };
+  }
+
+  it('a release after a failed server deploy deploys the server it still owes', () => {
+    const { r, head } = failedDeployThenRenderer();
+
+    expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({
+      previous: 'v1.1.0',
+      server: true,
+    });
+    expect(readReleaseDecision(r.repo, head, 'v1.1.0')).toMatchObject({ server: false });
+  });
+
+  it('a server that names no release is deployed', () => {
+    const { r, head } = failedDeployThenRenderer();
+
+    expect(readReleaseDecision(r.repo, head, null)).toMatchObject({ server: true });
+  });
+
+  it('refuses a server running a tag this release does not contain, naming it', () => {
+    const { r, head } = failedDeployThenRenderer();
+    r.tag('v9.0.0', r.commit('chore: elsewhere (t-7)', { 'x.txt': 'x\n' }));
+
+    expect(() => readReleaseDecision(r.repo, head, 'v9.0.0')).toThrow(/v9\.0\.0/);
+    expect(() => readReleaseDecision(r.repo, head, 'v7.7.7')).toThrow(/v7\.7\.7/);
   });
 });
 

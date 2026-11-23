@@ -190,6 +190,13 @@ describe('release.yml checks', () => {
     expect(runs(jobs.preflight)).toContain('scripts/release/release-preflight.ts');
   });
 
+  it('preflight measures the server range from the tag the live server reports, at the address the build bakes', () => {
+    const decide = jobs.preflight.steps.find((s) => s.run?.includes('release-preflight.ts'));
+
+    expect(decide?.run).toContain('--health-url "$HEALTH_URL"');
+    expect(decide?.env?.HEALTH_URL).toBe(`${jobs.build.env?.CHORD_CLOUD_API_URL}/health`);
+  });
+
   it('the build writes the notes, builds with them, and checks the release dir before upload', () => {
     const script = runs(jobs.build);
     const notes = 'release-notes/$TAG.md';
