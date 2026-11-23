@@ -378,4 +378,14 @@ describe('server traffic follows the version verdict', () => {
     expect(deleted(V)).toBe(false);
     expect(upgrades).toBe(upgradesBefore);
   });
+
+  // A stopped sender's own guards hide a kept listener from the network; count it instead.
+  it('a stop releases every traffic listener its start took', () => {
+    stopServerSenders();
+    const before = serverTraffic.subscriberCount;
+    startServerSenders();
+    expect(serverTraffic.subscriberCount).toBeGreaterThan(before);
+    stopServerSenders();
+    expect(serverTraffic.subscriberCount).toBe(before);
+  });
 });
