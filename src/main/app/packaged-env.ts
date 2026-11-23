@@ -10,3 +10,6 @@ declare const __CHORD_PACKAGED_ENV__: Record<string, string>;
 for (const [name, value] of Object.entries(__CHORD_PACKAGED_ENV__)) {
   if (process.env[name] === undefined) process.env[name] = value;
 }
+
+// A module, so it can be imported for its effect (src/main/index.ts and its test).
+export {};
