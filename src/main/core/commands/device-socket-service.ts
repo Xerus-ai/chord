@@ -97,6 +97,9 @@ class DeviceSocketService implements IInitializable, IDisposable {
   private unsubscribeTraffic: (() => void) | null = null;
 
   initialize(): void {
+    // A start after dispose() is a restart, as for the other server senders.
+    this.disposed = false;
+    this.attempts = 0;
     // The version handshake: a turned-away app drops its socket and rooms, and
     // reconnects (rejoining in onopen) once supported.
     this.unsubscribeTraffic = serverTraffic.subscribe((open) => {
