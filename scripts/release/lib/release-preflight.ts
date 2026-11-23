@@ -28,12 +28,15 @@ export type ReleaseDecision =
       /** The tag already points at this commit: a rerun of the same release. */
       rerun: boolean;
       tag: string;
-      /** The newest release tag of any channel this commit contains: what the server runs. */
+      /** The newest release tag of any channel this commit contains (migration lint's base). */
       previous: string | null;
       channel: 'stable' | 'canary';
-      /** previous..sha touches server/ or packages/protocol/ (or there is no previous). */
+      /**
+       * deployed..sha touches server/ or packages/protocol/, or the server names no release.
+       * Measured from what the server runs, not `previous`: a tag whose deploy failed still owes it.
+       */
       server: boolean;
-      /** The range raises MIN_DESKTOP_VERSION: the server deploys after the probe. */
+      /** MIN_DESKTOP_VERSION differs from the server's: the server deploys after the probe. */
       minDesktopRaised: boolean;
     };
 
@@ -128,7 +131,8 @@ function touchesServer(cwd: string, previous: string, head: string): boolean {
   });
 }
 
-function readMinRaised(cwd: string, sha: string, previous: string | null, version: string) {
+/** Whether `sha` changes MIN_DESKTOP_VERSION from `base` (the tag the server runs). */
+function readMinRaised(cwd: string, sha: string, base: string | null, version: string) {
   const min = readMinDesktopVersion(showFile(cwd, sha, MIN_DESKTOP_FILE));
   if (!meetsMinimum(version, min)) {
     throw new Error(
@@ -136,13 +140,33 @@ function readMinRaised(cwd: string, sha: string, previous: string | null, versio
         'the release that raises it must meet it (server/DEPLOYMENT.md section 7)'
     );
   }
-  if (previous === null) return false;
-  const before = showFileOrNull(cwd, previous, MIN_DESKTOP_FILE);
+  if (base === null) return false;
+  const before = showFileOrNull(cwd, base, MIN_DESKTOP_FILE);
   return before === null || readMinDesktopVersion(before) !== min;
 }
 
-/** The decision for `sha`; throws, naming the check, when a release fails one. */
-export function readReleaseDecision(cwd: string, sha: string): ReleaseDecision {
+/** Throws unless `deployed` is a release tag `head` contains: else the server runs elsewhere. */
+function assertDeployedIn(cwd: string, deployed: string, head: string): void {
+  const commit = tagCommit(cwd, deployed);
+  if (commit === null) {
+    throw new Error(`the server runs ${deployed}, which is not a tag of this repository`);
+  }
+  if (git(cwd, ['merge-base', commit, head]) !== commit) {
+    throw new Error(
+      `the server runs ${deployed}, which this release does not contain: a rollback or a skew to resolve first`
+    );
+  }
+}
+
+/**
+ * The decision for `sha`; throws, naming the check, when a release fails one. `deployed` is the
+ * tag the live server reports (deployed-tag.ts), null when it names none.
+ */
+export function readReleaseDecision(
+  cwd: string,
+  sha: string,
+  deployed: string | null
+): ReleaseDecision {
   // Without history a parent or tag reads as missing, the same as a root commit or no release.
   if (git(cwd, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error(
@@ -174,7 +198,8 @@ export function readReleaseDecision(cwd: string, sha: string): ReleaseDecision {
   const previous = readPreviousTag(cwd, head, tag);
   const range = previous ? `${previous}..${head}` : head;
   assertReleaseCommit(cwd, range, tag);
-  const server = previous === null || touchesServer(cwd, previous, head);
+  if (deployed !== null) assertDeployedIn(cwd, deployed, head);
+  const server = deployed === null || touchesServer(cwd, deployed, head);
   return {
     release: true,
     rerun: tagged === head,
@@ -182,7 +207,7 @@ export function readReleaseDecision(cwd: string, sha: string): ReleaseDecision {
     previous,
     channel: parseReleaseTag(tag).canary === null ? 'stable' : 'canary',
     server,
-    minDesktopRaised: readMinRaised(cwd, head, previous, version),
+    minDesktopRaised: readMinRaised(cwd, head, deployed ?? previous, version),
   };
 }
 

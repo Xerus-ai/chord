@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { readDeployedTag } from './lib/deployed-tag.ts';
 import { fail, info } from './lib/log.ts';
 import { formatReleaseOutputs, readReleaseDecision } from './lib/release-preflight.ts';
 
@@ -7,18 +8,24 @@ import { formatReleaseOutputs, readReleaseDecision } from './lib/release-preflig
  * release.yml's preflight (devstation-pqub, C4): decides whether the CI-green commit `--sha`
  * is a release, a rerun of one, or neither, and writes the decision to $GITHUB_OUTPUT (or
  * prints it when that is unset). A release that fails a check ends with exit 1, naming it.
+ * `--health-url` is the live sync server's /health: the tag it runs starts the server range.
  *
- *   node --experimental-strip-types scripts/release/release-preflight.ts --sha <commit>
+ *   node --experimental-strip-types scripts/release/release-preflight.ts --sha <commit>  *     --health-url <https://api.../health>
  */
 const { values } = parseArgs({
-  options: { sha: { type: 'string' } },
+  options: { sha: { type: 'string' }, 'health-url': { type: 'string' } },
   strict: true,
 });
-if (!values.sha) fail('Usage: release-preflight.ts --sha <commit>');
+const healthUrl = values['health-url'];
+if (!values.sha || !healthUrl) {
+  fail('Usage: release-preflight.ts --sha <commit> --health-url <url>');
+}
 
 let decision;
 try {
-  decision = readReleaseDecision(process.cwd(), values.sha);
+  const deployed = await readDeployedTag(healthUrl);
+  info(`the server runs ${deployed ?? 'no release'}`);
+  decision = readReleaseDecision(process.cwd(), values.sha, deployed);
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
