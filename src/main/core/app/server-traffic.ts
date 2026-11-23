@@ -73,6 +73,11 @@ class ServerTraffic {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
+  /** How many senders listen: a stopped sender that still counts here leaked its subscription. */
+  get subscriberCount(): number {
+    return this.listeners.size;
+  }
 }
 
 export const serverTraffic = new ServerTraffic();
