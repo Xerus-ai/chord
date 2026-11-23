@@ -92,6 +92,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       channel: 'stable',
       server: false,
       minDesktopRaised: false,
+      deployed: 'v1.0.0',
     });
   });
 
@@ -343,8 +344,10 @@ describe('readReleaseDecision: the server range starts at the tag the server run
   it('a release after a failed server deploy deploys the server it still owes', () => {
     const { r, head } = failedDeployThenRenderer();
 
+    // deployed, not previous, is the migration lint's base: v1.1.0 never went live.
     expect(readReleaseDecision(r.repo, head, 'v1.0.0')).toMatchObject({
       previous: 'v1.1.0',
+      deployed: 'v1.0.0',
       server: true,
     });
     expect(readReleaseDecision(r.repo, head, 'v1.1.0')).toMatchObject({ server: false });
@@ -376,9 +379,10 @@ describe('formatReleaseOutputs', () => {
         channel: 'canary',
         server: true,
         minDesktopRaised: false,
+        deployed: null,
       })
     ).toBe(
-      'release=true\nrerun=false\ntag=v1.1.0-canary.2\nprevious=\nchannel=canary\nserver=true\nmin_desktop_raised=false\n'
+      'release=true\nrerun=false\ntag=v1.1.0-canary.2\nprevious=\nchannel=canary\nserver=true\nmin_desktop_raised=false\ndeployed=\n'
     );
     expect(formatReleaseOutputs({ release: false, reason: 'v1.0.0 is tagged at abc' })).toBe(
       'release=false\n'

@@ -27,6 +27,7 @@ interface Job {
   needs?: string | string[];
   permissions?: Record<string, string>;
   'timeout-minutes'?: number;
+  outputs?: Record<string, string>;
   env?: Record<string, string>;
   strategy?: { matrix?: { include?: Record<string, string>[] } };
   steps: Step[];
@@ -180,13 +181,18 @@ describe('release.yml data and secrets', () => {
 });
 
 describe('release.yml checks', () => {
-  it('preflight fetches every tag and lints migrations since the previous release', () => {
+  it('preflight fetches every tag and lints migrations since the release the server runs', () => {
     const checkout = jobs.preflight.steps.find((s) => s.uses?.startsWith('actions/checkout@'));
+    const lint = jobs.preflight.steps.find((s) => s.run?.includes('migration-lint.ts'));
 
     expect(checkout?.with?.['fetch-depth']).toBe(0);
-    expect(runs(jobs.preflight)).toMatch(
-      /node --experimental-strip-types scripts\/release\/migration-lint\.ts --since "\$PREVIOUS"/
+    // Not the newest tag: after a failed deploy, a contract migration must stay safe for the
+    // release that is still live.
+    expect(lint?.env?.DEPLOYED).toBe('${{ steps.decide.outputs.deployed }}');
+    expect(lint?.run).toMatch(
+      /node --experimental-strip-types scripts\/release\/migration-lint\.ts --since "\$DEPLOYED"/
     );
+    expect(jobs.preflight.outputs?.deployed).toBe('${{ steps.decide.outputs.deployed }}');
     expect(runs(jobs.preflight)).toContain('scripts/release/release-preflight.ts');
   });
 
