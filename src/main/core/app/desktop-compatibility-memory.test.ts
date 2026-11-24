@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopCompatibility } from '@shared/desktop-compatibility';
+import type { VerdictMemory } from './desktop-compatibility';
 
 /**
  * The verdict an app was turned away with, remembered across launches. The bug
@@ -47,7 +48,7 @@ beforeEach(async () => {
 });
 
 /** One launch of the app at `version`: its monitor started, the first check done. */
-async function launch(version: string) {
+async function launch(version: string, memory: VerdictMemory = settingsVerdictMemory) {
   const changes: DesktopCompatibility[] = [];
   const verdicts: DesktopCompatibility[] = [];
   const monitor = new DesktopCompatibilityMonitor({
@@ -56,7 +57,7 @@ async function launch(version: string) {
     onChange: (s) => changes.push(s),
     onVerdict: (s) => verdicts.push(s),
     intervals: { regular: 60_000, paused: 60_000 },
-    memory: settingsVerdictMemory,
+    memory,
   });
   // start() resolves once the remembered verdict is applied and the first check is done
   await monitor.start();
@@ -112,5 +113,38 @@ describe('the verdict across launches', () => {
     });
     await settingsVerdictMemory.save(null);
     expect(await settingsVerdictMemory.load()).toBeNull();
+  });
+});
+
+/**
+ * The memory fails open: when it cannot be read, or the app cannot read its own
+ * version, the checks run as if nothing were remembered. Failing closed would hold
+ * every sender until a reading arrived, and for good while the server is out of reach.
+ */
+describe('the memory fails open', () => {
+  const unreadable: VerdictMemory = {
+    load: async () => {
+      throw new Error('settings store unreadable');
+    },
+    save: async () => {},
+  };
+
+  it('a memory that cannot be read still lets the first reading turn the app away', async () => {
+    // the bug: an uncaught load failure rejects start() before any check, so the app
+    // never gets a verdict and the renderer stays on its placeholder
+    minimum = '2.0.0';
+    const run = await launch('1.0.0', unreadable);
+    expect(run.monitor.getState()).toMatchObject({ state: 'update_required', minimum: '2.0.0' });
+    expect(run.verdicts.at(-1)?.state).toBe('update_required');
+  });
+
+  it('an app that cannot read its own version is not turned away by a remembered minimum', async () => {
+    // the bug: an unreadable version taken as the lowest locks the app out offline,
+    // with no reading to say which version would be let in
+    await settingsVerdictMemory.save('2.0.0');
+    reachable = false;
+    const run = await launch('not-a-version');
+    expect(run.verdicts.some((v) => v.state === 'update_required')).toBe(false);
+    expect(run.changes.some((c) => c.state === 'update_required')).toBe(false);
   });
 });
