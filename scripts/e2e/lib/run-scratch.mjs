@@ -8,6 +8,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import dotenv from 'dotenv';
+import { versionHeaders } from './client-version.mjs';
 import { ROOT } from './seeded-app.mjs';
 
 dotenv.config({ path: join(ROOT, '.env'), quiet: true });
@@ -56,7 +57,7 @@ export async function deleteWorkItemFromCloud(rpc, workItemId) {
   if (typeof token !== 'string' || !token) throw new Error('The run has no access token');
   const res = await fetch(cloudApiUrl(`/work-items/${workItemId}`), {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, ...versionHeaders() },
   });
   // 404: the item never reached the cloud, or the app's own delete got there first.
   if (![200, 204, 404].includes(res.status)) {

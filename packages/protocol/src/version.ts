@@ -87,3 +87,23 @@ export function compareVersions(a: string, b: string): number {
   }
   return comparePre(pa.pre, pb.pre);
 }
+
+/**
+ * The server enforces the minimum too (devstation-mg6u.13): every signed-in
+ * request names the client's version, REST in this header, a socket upgrade in
+ * the query parameter below (a browser WebSocket cannot set headers). A request
+ * that names none, an unreadable one or one below MIN_DESKTOP_VERSION is refused
+ * with 426 and REFUSAL_UPDATE_REQUIRED, before any token work.
+ */
+export const CHORD_VERSION_HEADER = 'X-Chord-Version';
+export const CHORD_VERSION_PARAM = 'chord_version';
+export const REFUSAL_UPDATE_REQUIRED = 'update_required';
+
+/** Whether a client naming `version` may use the API of a server whose minimum is `minimum`. */
+export function isClientVersionAccepted(
+  version: string | null | undefined,
+  minimum: string
+): boolean {
+  if (!version || !SemverSchema.safeParse(version).success) return false;
+  return compareVersions(version, minimum) >= 0;
+}

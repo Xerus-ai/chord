@@ -231,10 +231,22 @@ export default defineConfig({
             '@base-ui/react/tooltip',
             '@base-ui/react/button',
             'react/jsx-dev-runtime',
+            // The collab hook's, first loaded by renderer-sockets-version (devstation-mg6u.13).
+            '@hocuspocus/provider',
+            'y-indexeddb',
+            'yjs',
           ],
+        },
+        // The renderer's sync-server base points at the local API stand-in its
+        // globalSetup serves, never at the server in .env, which CI does not have.
+        define: {
+          'import.meta.env.VITE_CLOUD_API_URL': JSON.stringify('http://127.0.0.1:63410'),
+          'import.meta.env.VITE_CLOUD_WS_URL': JSON.stringify('ws://127.0.0.1:63410/ws'),
+          'import.meta.env.VITE_COLLAB_WS_URL': JSON.stringify('ws://127.0.0.1:63410/collab'),
         },
         test: {
           name: 'browser',
+          globalSetup: ['src/renderer/tests/browser/cloud-api-stand-in.setup.ts'],
           // Vitest's browser default, 63315, is inside a port range Windows
           // reserves for Hyper-V/WinNAT on this machine (63232-63331): the
           // Vite server then dies with `listen EACCES ::1:63315` as an

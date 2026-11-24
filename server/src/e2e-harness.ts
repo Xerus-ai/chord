@@ -1,3 +1,4 @@
+import { CHORD_VERSION_HEADER, CHORD_VERSION_PARAM, MIN_DESKTOP_VERSION } from '@chord/protocol';
 import WebSocket from 'ws';
 
 /**
@@ -24,6 +25,7 @@ export async function apiFetch(path: string, token: string, init?: RequestInit):
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      [CHORD_VERSION_HEADER]: MIN_DESKTOP_VERSION,
       ...init?.headers,
     },
   });
@@ -31,7 +33,9 @@ export async function apiFetch(path: string, token: string, init?: RequestInit):
 
 export function connectWs(token: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${WS_URL}?token=${token}`);
+    const ws = new WebSocket(
+      `${WS_URL}?token=${token}&${CHORD_VERSION_PARAM}=${MIN_DESKTOP_VERSION}`
+    );
     ws.on('open', () => resolve(ws));
     ws.on('error', (err) => reject(err));
     const timeout = setTimeout(() => reject(new Error('WS connect timeout')), 5000);

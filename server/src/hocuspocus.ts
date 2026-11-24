@@ -12,6 +12,7 @@ import {
   type VersionInsertResult,
   type VersionTrigger,
 } from './artifact-version-rows.js';
+import { isUpgradeVersionAccepted, updateRequiredRefusal } from './client-version.js';
 import { db, hasDb } from './db/client.js';
 import { artifacts, artifactVersionSnapshots, yjsDocuments } from './db/schema-artifacts.js';
 import { DEV_MODE, verifyAccessToken, type AuthClaims } from './middleware/auth.js';
@@ -287,7 +288,9 @@ export function createHocuspocusServer(port: number) {
     port,
     quiet: true,
 
-    async onAuthenticate({ token, documentName, connectionConfig }) {
+    async onAuthenticate({ token, documentName, connectionConfig, requestParameters }) {
+      // A client below the minimum desktop version, or naming none, is refused before the token.
+      if (!isUpgradeVersionAccepted(requestParameters)) throw updateRequiredRefusal();
       const claims = await verifyAccessToken(token);
       const role = await resolveDocumentAccess(claims, documentName);
       // 'view' still gets sync (read access to live content) but Hocuspocus
