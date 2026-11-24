@@ -238,10 +238,11 @@ export default defineConfig({
           ],
         },
         // The renderer's sync-server base points at the local API stand-in its
-        // globalSetup serves, never at the server in .env (devstation-mg6u.13).
+        // globalSetup serves, never at the server in .env, which CI does not have.
         define: {
           'import.meta.env.VITE_CLOUD_API_URL': JSON.stringify('http://127.0.0.1:63410'),
           'import.meta.env.VITE_CLOUD_WS_URL': JSON.stringify('ws://127.0.0.1:63410/ws'),
+          'import.meta.env.VITE_COLLAB_WS_URL': JSON.stringify('ws://127.0.0.1:63410/collab'),
         },
         test: {
           name: 'browser',
