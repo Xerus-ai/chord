@@ -76,6 +76,13 @@ export function createReleasedRepo() {
 
 export const RELEASE = (tag: string) => `chore(release): ${tag} (t-9)`;
 /** A commit that is not a release never asks the server what it runs (its /health may be down). */
+/**
+ * Only an untagged version its parent already names, with its release commit in range, asks
+ * whether CI ran on the commit that moved the version; every other decision never asks.
+ */
+export const NO_CI_ASKED = async (sha: string): Promise<boolean> => {
+  throw new Error(`asked whether CI ran on ${sha}`);
+};
 export const NO_HEALTH = async (): Promise<string | null> => {
   throw new Error('read /health for a commit that is not a release');
 };

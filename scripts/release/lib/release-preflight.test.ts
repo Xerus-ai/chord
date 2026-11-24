@@ -8,6 +8,7 @@ import {
   createReleasedRepo,
   createRepo,
   minDesktop,
+  NO_CI_ASKED,
   NO_HEALTH,
   pkg,
   RELEASE,
@@ -31,7 +32,9 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toEqual({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toEqual({
       release: true,
       rerun: false,
       tag: 'v1.1.0',
@@ -50,7 +53,9 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
     ]);
     r.tag('v1.1.0', head);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       release: true,
       rerun: true,
       tag: 'v1.1.0',
@@ -66,24 +71,49 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
     r.tag('v1.1.0', released);
     const head = r.mergePr('fix/b', [['fix(main): b (t-3)', { 'src/main/b.ts': 'export {};\n' }]]);
 
-    await expect(readReleaseDecision(r.repo, head, NO_HEALTH)).resolves.toMatchObject({
+    await expect(readReleaseDecision(r.repo, head, NO_HEALTH, NO_CI_ASKED)).resolves.toMatchObject({
       release: false,
     });
   });
 
-  it('a later commit cuts a release whose own merge was never decided', async () => {
+  it('a later commit cuts a release whose own merge never got a CI run', async () => {
     // The release merge's push event was lost (no CI, no release.yml); the next main commit
     // still names the untagged version and must cut it, or the release is stranded for good.
     const r = createReleasedRepo();
-    r.mergePr('release/v1.1.0', [[RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])]]);
-    const head = r.mergePr('fix/d', [['fix(main): d (t-5)', { 'src/main/d.ts': 'export {};\n' }]]);
+    const merge = r.mergePr('release/v1.1.0', [
+      [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
+    ]);
+    r.mergePr('fix/d', [['fix(main): d (t-5)', { 'src/main/d.ts': 'export {};\n' }]]);
+    const head = r.mergePr('fix/e', [['fix(main): e (t-6)', { 'src/main/e.ts': 'export {};\n' }]]);
+    const asked: string[] = [];
+    const ciRan = async (sha: string) => {
+      asked.push(sha);
+      return false;
+    };
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', ciRan)
+    ).resolves.toMatchObject({
       release: true,
       rerun: false,
       tag: 'v1.1.0',
       previous: 'v1.0.0',
     });
+    // Asked about the merge that moved the version, not the head or the release branch's commit.
+    expect(asked).toEqual([merge]);
+  });
+
+  it('a later commit is not a release while the release merge has its own CI run', async () => {
+    // Out of order: the later commit's CI finished first, or the merge's CI failed. Cutting here
+    // would tag a commit carrying a PR the release's CHANGELOG section does not cover.
+    const r = createReleasedRepo();
+    r.mergePr('release/v1.1.0', [[RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])]]);
+    const head = r.mergePr('fix/d', [['fix(main): d (t-5)', { 'src/main/d.ts': 'export {};\n' }]]);
+
+    const decision = await readReleaseDecision(r.repo, head, NO_HEALTH, async () => true);
+
+    expect(decision.release).toBe(false);
+    expect(decision).toMatchObject({ reason: expect.stringContaining('its own CI run') });
   });
 
   it('a version that never moved and was never tagged (main before its first release) is not a release', async () => {
@@ -92,7 +122,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       ['feat(main): a (t-2)', { 'src/main/a.ts': 'export {};\n' }],
     ]);
 
-    const decision = await readReleaseDecision(r.repo, head, NO_HEALTH);
+    const decision = await readReleaseDecision(r.repo, head, NO_HEALTH, NO_CI_ASKED);
 
     expect(decision.release).toBe(false);
     expect(decision).toMatchObject({ reason: expect.stringContaining('v0.1.0') });
@@ -104,7 +134,9 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
       [RELEASE('v1.0.0-canary.1'), releaseFiles('1.0.0-canary.1')],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => null)).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => null, NO_CI_ASKED)
+    ).resolves.toMatchObject({
       release: true,
       tag: 'v1.0.0-canary.1',
       previous: null,
@@ -123,9 +155,9 @@ describe('readReleaseDecision: the release commit', () => {
       ],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /no commit 'chore\(release\): v1\.1\.0 \(<bead>\)'/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/no commit 'chore\(release\): v1\.1\.0 \(<bead>\)'/);
   });
 
   it('refuses a release commit that touches more than the version files, naming the file', async () => {
@@ -137,9 +169,9 @@ describe('readReleaseDecision: the release commit', () => {
       ],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /src\/main\/sneaky\.ts/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/src\/main\/sneaky\.ts/);
   });
 
   it('refuses two release commits for one tag', async () => {
@@ -149,9 +181,9 @@ describe('readReleaseDecision: the release commit', () => {
       [RELEASE('v1.1.0'), { 'CHANGELOG.md': changelog('v1.1.0', 'v1.0.0') + '\n' }],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /2 commits/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/2 commits/);
   });
 });
 
@@ -165,9 +197,9 @@ describe('readReleaseDecision: the version files', () => {
       ],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /server\/package\.json.*1\.0\.1/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/server\/package\.json.*1\.0\.1/);
   });
 
   it('refuses an off-grammar version (1.0.0-rc1)', async () => {
@@ -176,9 +208,9 @@ describe('readReleaseDecision: the version files', () => {
       [RELEASE('v1.1.0-rc1'), releaseFiles('1.1.0-rc1', ['v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /not a release tag/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/not a release tag/);
   });
 
   it('refuses a CHANGELOG without the section for the tag', async () => {
@@ -187,9 +219,9 @@ describe('readReleaseDecision: the version files', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /CHANGELOG\.md has no section for v1\.1\.0/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/CHANGELOG\.md has no section for v1\.1\.0/);
   });
 });
 
@@ -204,7 +236,9 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       server: true,
     });
   });
@@ -219,7 +253,9 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.0.1'), releaseFiles('1.0.1', ['v1.0.1', 'v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       server: true,
       minDesktopRaised: false,
     });
@@ -234,7 +270,7 @@ describe('readReleaseDecision: what the range carries', () => {
     ]);
 
     await expect(
-      readReleaseDecision(r.repo, head, async () => 'v1.1.0-canary.1')
+      readReleaseDecision(r.repo, head, async () => 'v1.1.0-canary.1', NO_CI_ASKED)
     ).resolves.toMatchObject({
       tag: 'v1.1.0-canary.2',
       previous: 'v1.1.0-canary.1',
@@ -252,7 +288,9 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       server: true,
       minDesktopRaised: true,
     });
@@ -267,9 +305,9 @@ describe('readReleaseDecision: what the range carries', () => {
       [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
     ]);
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /MIN_DESKTOP_VERSION 1\.2\.0/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/MIN_DESKTOP_VERSION 1\.2\.0/);
   });
 });
 
@@ -283,9 +321,9 @@ describe('readReleaseDecision: a git that cannot answer', () => {
     execFileSync('git', ['clone', '-q', '--depth', '1', `file://${r.repo}`, shallow]);
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: shallow, encoding: 'utf8' });
 
-    await expect(readReleaseDecision(shallow, head.trim(), async () => null)).rejects.toThrow(
-      /shallow clone.*fetch-depth: 0/
-    );
+    await expect(
+      readReleaseDecision(shallow, head.trim(), async () => null, NO_CI_ASKED)
+    ).rejects.toThrow(/shallow clone.*fetch-depth: 0/);
   });
 
   it('a git failure is an error, not a missing tag or parent', async () => {
@@ -295,9 +333,9 @@ describe('readReleaseDecision: a git that cannot answer', () => {
     const tagObject = r.git('rev-parse', 'refs/tags/v1.0.0');
     rmSync(join(r.repo, '.git', 'objects', tagObject.slice(0, 2), tagObject.slice(2)));
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).rejects.toThrow(
-      /git rev-parse .*v1\.0\.0/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/git rev-parse .*v1\.0\.0/);
   });
 });
 
