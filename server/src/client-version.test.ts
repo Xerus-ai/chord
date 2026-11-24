@@ -1,12 +1,12 @@
 import { createServer, type Server } from 'node:http';
 import { createServer as createTcpServer, type AddressInfo } from 'node:net';
-import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import {
   CHORD_VERSION_HEADER,
   CHORD_VERSION_PARAM,
   compareVersions,
   MIN_DESKTOP_VERSION,
 } from '@chord/protocol';
+import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
