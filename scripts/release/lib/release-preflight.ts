@@ -164,14 +164,15 @@ function assertDeployedIn(cwd: string, deployed: string, head: string): void {
 }
 
 /**
- * The decision for `sha`; throws, naming the check, when a release fails one. `deployed` is the
- * tag the live server reports (deployed-tag.ts), null when it names none.
+ * The decision for `sha`; throws, naming the check, when a release fails one. `readDeployed`
+ * asks the live server which release it runs (deployed-tag.ts; null for none) and is called only
+ * for a release that passed its checks: a commit that is not a release never needs the server.
  */
-export function readReleaseDecision(
+export async function readReleaseDecision(
   cwd: string,
   sha: string,
-  deployed: string | null
-): ReleaseDecision {
+  readDeployed: () => Promise<string | null>
+): Promise<ReleaseDecision> {
   // Without history a parent or tag reads as missing, the same as a root commit or no release.
   if (git(cwd, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error(
@@ -203,6 +204,7 @@ export function readReleaseDecision(
   const previous = readPreviousTag(cwd, head, tag);
   const range = previous ? `${previous}..${head}` : head;
   assertReleaseCommit(cwd, range, tag);
+  const deployed = await readDeployed();
   if (deployed !== null) assertDeployedIn(cwd, deployed, head);
   const server = deployed === null || touchesServer(cwd, deployed, head);
   return {

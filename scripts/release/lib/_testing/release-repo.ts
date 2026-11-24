@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
  * release-preflight-deployed.test.ts): version files, release commits, tags and merge commits
  * the way GitHub makes them.
  */
-const temps: string[] = [];
+export const temps: string[] = [];
 /** Each test file's afterEach: removes the repositories its cases made. */
 export function removeTempRepos(): void {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });

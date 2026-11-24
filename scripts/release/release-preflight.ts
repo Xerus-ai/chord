@@ -8,9 +8,11 @@ import { formatReleaseOutputs, readReleaseDecision } from './lib/release-preflig
  * release.yml's preflight (devstation-pqub, C4): decides whether the CI-green commit `--sha`
  * is a release, a rerun of one, or neither, and writes the decision to $GITHUB_OUTPUT (or
  * prints it when that is unset). A release that fails a check ends with exit 1, naming it.
- * `--health-url` is the live sync server's /health: the tag it runs starts the server range.
+ * `--health-url` is the live sync server's /health, read only for a release: the tag it runs
+ * starts the server range and the migration lint.
  *
- *   node --experimental-strip-types scripts/release/release-preflight.ts --sha <commit>  *     --health-url <https://api.../health>
+ *   node --experimental-strip-types scripts/release/release-preflight.ts --sha <commit> \
+ *     --health-url <https://api.../health>
  */
 const { values } = parseArgs({
   options: { sha: { type: 'string' }, 'health-url': { type: 'string' } },
@@ -23,9 +25,11 @@ if (!values.sha || !healthUrl) {
 
 let decision;
 try {
-  const deployed = await readDeployedTag(healthUrl);
-  info(`the server runs ${deployed ?? 'no release'}`);
-  decision = readReleaseDecision(process.cwd(), values.sha, deployed);
+  decision = await readReleaseDecision(process.cwd(), values.sha, async () => {
+    const deployed = await readDeployedTag(healthUrl);
+    info(`the server runs ${deployed ?? 'no release'}`);
+    return deployed;
+  });
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }

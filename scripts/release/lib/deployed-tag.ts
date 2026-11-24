@@ -2,8 +2,10 @@ const RELEASE_TAG = /^v\d+\.\d+\.\d+(-canary\.\d+)?$/;
 
 /**
  * The release tag the live sync server runs, from its /health `version` (the deploy's
- * CHORD_RELEASE_TAG; null outside a deploy). Throws when the server cannot be reached, answers
- * other than 200, or reports something that is not a release tag: the release decision needs it.
+ * CHORD_RELEASE_TAG). Null when it runs no release: no version outside a deploy, or a version
+ * that is not a release tag (a rehearsal deploy such as v0.0.0-5s42.4); the release then deploys
+ * the server. Throws when the server cannot be reached, answers other than 200, or sends no
+ * string or null `version`: the release decision needs a reading.
  */
 export async function readDeployedTag(
   healthUrl: string,
@@ -21,10 +23,10 @@ export async function readDeployedTag(
   }
   const body = (await response.json()) as { version?: unknown };
   if (body.version === null) return null;
-  if (typeof body.version !== 'string' || !RELEASE_TAG.test(body.version)) {
+  if (typeof body.version !== 'string') {
     throw new Error(
-      `${healthUrl} reports version ${JSON.stringify(body.version)}, not a release tag`
+      `${healthUrl} reports version ${JSON.stringify(body.version)}, not a health reading`
     );
   }
-  return body.version;
+  return RELEASE_TAG.test(body.version) ? body.version : null;
 }

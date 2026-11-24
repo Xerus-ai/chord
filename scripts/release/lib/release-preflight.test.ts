@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  changelog,
   createReleasedRepo,
   createRepo,
   minDesktop,
   NO_HEALTH,
+  pkg,
   RELEASE,
   releaseFiles,
   removeTempRepos,
