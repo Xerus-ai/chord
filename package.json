@@ -1,6 +1,6 @@
 {
   "name": "chord",
-  "version": "0.1.0",
+  "version": "1.0.0-canary.1",
   "description": "A multiplayer desktop workspace where dev teams align and AI agents build",
   "license": "Apache-2.0",
   "private": true,
