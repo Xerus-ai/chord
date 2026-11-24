@@ -88,6 +88,21 @@ function extractPrRefs(items: WorkItemContext[]): Array<{ url: string; title: st
   return refs;
 }
 
+/**
+ * Team Pulse's requests to the sync server, both through here: the server
+ * refuses one that does not name the app's version (devstation-mg6u.13).
+ */
+function syncServerRequest(url: string, token: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      [CHORD_VERSION_HEADER]: APP_VERSION,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
 export async function generateTeamPulse(
   orgId: string,
   cloudApiBase: string
@@ -104,13 +119,10 @@ export async function generateTeamPulse(
 
   let members: MemberActivity[];
   try {
-    const res = await fetch(`${cloudApiBase}/team-pulse/${orgId}/activity-context`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        [CHORD_VERSION_HEADER]: APP_VERSION,
-        'Content-Type': 'application/json',
-      },
-    });
+    const res = await syncServerRequest(
+      `${cloudApiBase}/team-pulse/${orgId}/activity-context`,
+      token
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     members = (await res.json()) as MemberActivity[];
   } catch (error) {
@@ -174,13 +186,8 @@ export async function generateTeamPulse(
   }
 
   try {
-    const res = await fetch(`${cloudApiBase}/team-pulse/${orgId}/summaries`, {
+    const res = await syncServerRequest(`${cloudApiBase}/team-pulse/${orgId}/summaries`, token, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        [CHORD_VERSION_HEADER]: APP_VERSION,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ summaries }),
     });
     if (!res.ok) {
