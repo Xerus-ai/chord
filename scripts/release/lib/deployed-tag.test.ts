@@ -39,13 +39,21 @@ describe('readDeployedTag', () => {
     await expect(readDeployedTag(url)).resolves.toBeNull();
   });
 
-  it('refuses an answer that is not a health reading or names no release tag', async () => {
+  // The live server ran a rehearsal deploy's tag (v0.0.0-5s42.4) before any release: refusing it
+  // would fail every release run; it means no release is live, so the server deploys.
+  it('a server running a version that is not a release tag runs no release: null', async () => {
+    const url = await serve(200, JSON.stringify({ status: 'ok', version: 'v0.0.0-5s42.4' }));
+
+    await expect(readDeployedTag(url)).resolves.toBeNull();
+  });
+
+  it('refuses an answer that is not a health reading', async () => {
     const noField = await serve(200, JSON.stringify({ status: 'ok' }));
     await expect(readDeployedTag(noField)).rejects.toThrow(/version/);
     await new Promise((resolve) => server!.close(resolve));
 
-    const notATag = await serve(200, JSON.stringify({ status: 'ok', version: 'main' }));
-    await expect(readDeployedTag(notATag)).rejects.toThrow(/main/);
+    const notAString = await serve(200, JSON.stringify({ status: 'ok', version: 7 }));
+    await expect(readDeployedTag(notAString)).rejects.toThrow(/version/);
   });
 
   it('refuses an unhealthy server, naming its status', async () => {
