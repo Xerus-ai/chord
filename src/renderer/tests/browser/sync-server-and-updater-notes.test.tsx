@@ -90,6 +90,22 @@ describe('Settings and a build with no updater', () => {
     expect(view.textContent).not.toMatch(/up to date/i);
   });
 
+  // A re-check on such a build only repeats the same note: the card offers none.
+  it('offers no Check for updates on a build that cannot update itself', async () => {
+    const checkButton = (view: HTMLElement) =>
+      view.querySelector('button[aria-label="Check for updates"]');
+    useUpdateStore.setState({ state: { status: 'idle' } });
+    const idle = render(<UpdateCard />);
+    await vi.waitFor(() => expect(checkButton(idle)).not.toBeNull());
+    root?.unmount();
+    host?.remove();
+
+    useUpdateStore.setState({ state: { status: 'unavailable' } });
+    const view = render(<UpdateCard />);
+    await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
+    expect(checkButton(view)).toBeNull();
+  });
+
   // The boot check is the only word an inactive updater gives (it sends no event).
   // Dropping its answer left the card idle, and idle reads "You're up to date."
   it('says so from launch, before anyone checks', async () => {
