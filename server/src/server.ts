@@ -3,6 +3,7 @@ import { MIN_DESKTOP_VERSION } from '@chord/protocol';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { handlePolarWebhook } from './billing/polar-webhook.js';
+import { requireClientVersion } from './client-version.js';
 import { DEV_MODE, requireAuth, type AuthenticatedRequest } from './middleware/auth.js';
 import { mountJsonBodyParsers } from './middleware/json-body-parsers.js';
 import {
@@ -160,6 +161,10 @@ export function createApp(connectionManager: ConnectionManager) {
   // Signed-out web surface (P6): public artifact links and desktop handoff pages.
   mountPublicWebRoutes(app);
 
+  // Every route below is the signed-in API only Chord clients call: a client that
+  // names no version, or one below the minimum, is refused before any token work.
+  // The routes above (health, sign-in, webhook, public web) stay open.
+  app.use(requireClientVersion);
   app.use(requireAuth);
   app.use(userRateLimiter);
 

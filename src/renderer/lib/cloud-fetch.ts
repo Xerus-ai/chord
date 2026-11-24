@@ -1,3 +1,6 @@
+import { CHORD_VERSION_HEADER } from '@chord/protocol';
+import { APP_VERSION } from '@shared/app-version';
+
 /**
  * The one authenticated request to the cloud API: the bearer token (cached,
  * refreshed once on a 401) and server errors as `CloudApiError`.
@@ -74,6 +77,7 @@ export async function cloudFetch<T>(path: string, init?: RequestInit): Promise<T
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      [CHORD_VERSION_HEADER]: APP_VERSION,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -89,6 +93,7 @@ export async function cloudFetch<T>(path: string, init?: RequestInit): Promise<T
         ...init,
         headers: {
           'Content-Type': 'application/json',
+          [CHORD_VERSION_HEADER]: APP_VERSION,
           Authorization: `Bearer ${retryToken}`,
           ...init?.headers,
         },

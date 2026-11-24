@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { CHORD_VERSION_PARAM, MIN_DESKTOP_VERSION } from '@chord/protocol';
 import WebSocket from 'ws';
 import {
   apiFetch,
@@ -29,7 +30,9 @@ const { userAToken, userBToken } = requireTokens();
 
 function connectDeviceWs(token: string, deviceId: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${WS_URL}?token=${token}&device_id=${deviceId}`);
+    const ws = new WebSocket(
+      `${WS_URL}?token=${token}&device_id=${deviceId}&${CHORD_VERSION_PARAM}=${MIN_DESKTOP_VERSION}`
+    );
     const timeout = setTimeout(() => reject(new Error('device WS connect timeout')), 5000);
     ws.on('open', () => {
       clearTimeout(timeout);

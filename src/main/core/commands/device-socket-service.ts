@@ -1,4 +1,5 @@
-import type { CloudChatMessage } from '@chord/protocol';
+import { CHORD_VERSION_PARAM, type CloudChatMessage } from '@chord/protocol';
+import { APP_VERSION } from '@shared/app-version';
 import { classifySeq } from '@shared/session-stream-reducers';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
 import { serverTraffic } from '@main/core/app/server-traffic';
@@ -167,9 +168,11 @@ class DeviceSocketService implements IInitializable, IDisposable {
       // Paused while the session and token were read.
       if (this.disposed || this.socket || !serverTraffic.isOpen()) return;
 
-      const socket = new WebSocket(`${cloudWsUrl()}?device_id=${encodeURIComponent(deviceId)}`, [
-        `auth-${token}`,
-      ]);
+      const query = new URLSearchParams({
+        device_id: deviceId,
+        [CHORD_VERSION_PARAM]: APP_VERSION,
+      });
+      const socket = new WebSocket(`${cloudWsUrl()}?${query.toString()}`, [`auth-${token}`]);
       this.socket = socket;
 
       socket.onopen = () => {

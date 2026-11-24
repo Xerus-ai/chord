@@ -2,6 +2,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import * as Y from 'yjs';
+import { withAppVersion } from '@shared/app-version';
 import { useAccountSession } from '@renderer/lib/hooks/useAccount';
 import { cursorColorForUser } from '@renderer/utils/color-palettes';
 import { fetchCollabToken } from './collab-token';
@@ -89,7 +90,7 @@ export function useCollaboration({
     void authRetryNonce;
 
     const p = new HocuspocusProvider({
-      url: serverUrl,
+      url: withAppVersion(serverUrl),
       name: roomId,
       document: docState.ydoc,
       token: fetchCollabToken,

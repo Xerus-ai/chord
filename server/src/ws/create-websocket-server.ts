@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { ClientEventSchema, type ClientEvent } from '@chord/protocol';
 import { WebSocketServer } from 'ws';
+import { isUpgradeVersionAccepted } from '../client-version.js';
 import { authenticateWebSocket, DEV_MODE } from '../middleware/auth.js';
 import { createWsRateLimiter } from '../middleware/rate-limit.js';
 import { authorizeRoomJoin } from './authorize.js';
@@ -35,6 +36,13 @@ export function createWebSocketServer(server: Server, connectionManager: Connect
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
     if (url.pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
+
+    // A client below the minimum desktop version, or naming none, is refused before auth.
+    if (!isUpgradeVersionAccepted(url.searchParams)) {
+      socket.write('HTTP/1.1 426 Upgrade Required\r\n\r\n');
       socket.destroy();
       return;
     }

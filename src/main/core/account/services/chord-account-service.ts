@@ -1,3 +1,5 @@
+import { CHORD_VERSION_HEADER } from '@chord/protocol';
+import { APP_VERSION } from '@shared/app-version';
 import { accountStateChangedChannel, type AuthState } from '@shared/events/accountEvents';
 import { KV } from '@main/db/kv';
 import { events } from '@main/lib/events';
@@ -242,6 +244,7 @@ export class ChordAccountService {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.sessionToken}`,
+          [CHORD_VERSION_HEADER]: APP_VERSION,
         },
         body: JSON.stringify({
           name: profile.username,

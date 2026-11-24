@@ -8,6 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { withAppVersion } from '@shared/app-version';
 import { clearCachedToken } from '@renderer/lib/cloud-fetch';
 import { rpc } from '@renderer/lib/ipc';
 import { createRoomRegistry, type RoomJoinStatus, type RoomLifecycleFrame } from './room-registry';
@@ -236,7 +237,7 @@ export function useSyncSocketService(): SyncSocketContextValue {
         return;
       }
 
-      const socket = new WebSocket(SYNC_WS_BASE, [`auth-${token}`]);
+      const socket = new WebSocket(withAppVersion(SYNC_WS_BASE), [`auth-${token}`]);
 
       socket.onopen = () => {
         if (disposed) {

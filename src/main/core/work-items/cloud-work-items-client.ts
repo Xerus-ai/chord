@@ -1,8 +1,10 @@
-import type {
-  CloudGitStatePutBody,
-  CloudSessionsPutBody,
-  CloudWorktreesPutBody,
+import {
+  CHORD_VERSION_HEADER,
+  type CloudGitStatePutBody,
+  type CloudSessionsPutBody,
+  type CloudWorktreesPutBody,
 } from '@chord/protocol';
+import { APP_VERSION } from '@shared/app-version';
 import {
   chordAccountService,
   type CachedProfile,
@@ -129,6 +131,7 @@ export async function cloudFetch(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      [CHORD_VERSION_HEADER]: APP_VERSION,
       ...init?.headers,
     },
     signal: AbortSignal.timeout(timeoutMs),

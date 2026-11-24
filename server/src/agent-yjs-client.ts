@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { CHORD_VERSION_PARAM, MIN_DESKTOP_VERSION } from '@chord/protocol';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
@@ -28,8 +29,12 @@ export class AgentYjsClient {
     const agentColor = options.agentColor ?? AGENT_CURSOR_COLOR;
     this.ydoc = new Y.Doc();
 
+    // Built from the same commit as the server, so it speaks the current protocol:
+    // it names the minimum, which the collab server's version check accepts.
+    const url = new URL(options.serverUrl);
+    url.searchParams.set(CHORD_VERSION_PARAM, MIN_DESKTOP_VERSION);
     this.websocketProvider = new HocuspocusProviderWebsocket({
-      url: options.serverUrl,
+      url: url.toString(),
       WebSocketPolyfill: WebSocket as unknown as typeof globalThis.WebSocket,
     });
 
