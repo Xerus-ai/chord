@@ -9,14 +9,14 @@ import WebSocket from 'ws';
 export const API_BASE = process.env.API_BASE ?? 'http://localhost:1234';
 export const WS_URL = process.env.WS_URL ?? 'ws://localhost:1234/ws';
 
-export interface TestResult {
+interface TestResult {
   name: string;
   passed: boolean;
   duration: number;
   error?: string;
 }
 
-export const results: TestResult[] = [];
+const results: TestResult[] = [];
 
 export async function apiFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
