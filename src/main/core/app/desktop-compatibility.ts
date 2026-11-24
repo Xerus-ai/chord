@@ -69,6 +69,13 @@ export async function readDesktopCompatibility(
   return { state: 'supported', current, minimum };
 }
 
+/** Where the minimum that last turned this app away is kept between launches. */
+export interface VerdictMemory {
+  load(): Promise<string | null>;
+  /** The minimum of an update_required verdict, or null once the server lets the app in. */
+  save(requiredMinimum: string | null): Promise<void>;
+}
+
 export interface DesktopCompatibilityMonitorOptions {
   baseUrl: string;
   currentVersion: () => Promise<string>;
@@ -83,6 +90,12 @@ export interface DesktopCompatibilityMonitorOptions {
    * verdict it let through is asked for again soon, not half an hour later.
    */
   intervals: { regular: number; paused: number };
+  /**
+   * The last verdict that turned this app away, kept across launches: relaunched
+   * with the server out of reach, an app below it starts turned away instead of
+   * reading unknown, which would open its traffic to the server.
+   */
+  memory: VerdictMemory;
 }
 
 /**
@@ -98,6 +111,8 @@ export class DesktopCompatibilityMonitor {
   };
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** What the memory holds, so it is written only when the server's word changes. */
+  private remembered: string | null = null;
 
   constructor(private readonly options: DesktopCompatibilityMonitorOptions) {}
 
@@ -105,10 +120,40 @@ export class DesktopCompatibilityMonitor {
     return this.state;
   }
 
-  /** Checks now, then again after each interval until stop(). */
-  start(): void {
+  /**
+   * Applies the remembered verdict, checks now, then again after each interval
+   * until stop(). Resolves once the first check is done.
+   */
+  async start(): Promise<void> {
     this.running = true;
-    void this.checkAndSchedule();
+    try {
+      await this.restore();
+    } catch (error) {
+      // Unreadable, the memory holds nothing: the checks still run, as before it existed.
+      log.error('desktop compatibility memory not read', { error: String(error) });
+    }
+    await this.checkAndSchedule();
+  }
+
+  /** A remembered minimum the current version is still below turns the app away before any reading. */
+  private async restore(): Promise<void> {
+    this.remembered = await this.options.memory.load();
+    if (this.remembered === null) return;
+    const current = await this.options.currentVersion();
+    if (!SemverSchema.safeParse(current).success) return;
+    if (compareVersions(current, this.remembered) >= 0) return;
+    this.state = { state: 'update_required', current, minimum: this.remembered };
+    this.options.onChange(this.state);
+    this.options.onVerdict(this.state);
+  }
+
+  /** The server's word is remembered; a failed reading (unknown) changes nothing. */
+  private async remember(state: DesktopCompatibility): Promise<void> {
+    if (state.state === 'unknown') return;
+    const next = state.state === 'update_required' ? state.minimum : null;
+    if (next === this.remembered) return;
+    await this.options.memory.save(next);
+    this.remembered = next;
   }
 
   stop(): void {
@@ -146,6 +191,7 @@ export class DesktopCompatibilityMonitor {
       if (changed) this.options.onChange(reading);
     }
     this.options.onVerdict(this.state);
+    await this.remember(this.state);
     return reading;
   }
 

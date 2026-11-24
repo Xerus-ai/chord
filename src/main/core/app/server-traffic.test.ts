@@ -193,6 +193,8 @@ beforeAll(async () => {
     onChange: () => {},
     onVerdict: (state) => serverTraffic.apply(state),
     intervals: { regular: 60_000, paused: 60_000 },
+    // each test is one launch: nothing is remembered from an earlier one
+    memory: { load: async () => null, save: async () => {} },
   });
   await db.insert(repos).values({ id: 'r-traffic', alias: 'repo', path: '/tmp/traffic' });
   await signInTestAccount({ username: 'tess', email: 'tess@example.com' });

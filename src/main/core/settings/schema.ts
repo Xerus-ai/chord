@@ -192,6 +192,15 @@ export const sharingSettingsSchema = z.object({
   defaultWorkItemAccess: z.enum(['invited', 'team_view']),
 });
 
+/**
+ * Not a preference: the sync server's last word on this app's version, kept so an
+ * app it turned away stays turned away across a relaunch with the server out of
+ * reach. `requiredMinimum` is the minimum that turned it away; null once let in.
+ */
+export const desktopCompatibilitySettingsSchema = z.object({
+  requiredMinimum: z.string().min(1).nullable(),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   git: gitSettingsSchema,
@@ -213,6 +222,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   qualityGates: qualityGatesSettingsSchema,
   artifacts: artifactsSettingsSchema,
   sharing: sharingSettingsSchema,
+  desktopCompatibility: desktopCompatibilitySettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -236,4 +246,5 @@ export const appSettingsSchema = z.object({
   qualityGates: qualityGatesSettingsSchema,
   artifacts: artifactsSettingsSchema,
   sharing: sharingSettingsSchema,
+  desktopCompatibility: desktopCompatibilitySettingsSchema,
 });
