@@ -5,6 +5,7 @@ import { events } from '@main/lib/events';
 import type { IDisposable, IInitializable } from '@main/lib/lifecycle';
 import { log } from '@main/lib/logger';
 import { DesktopCompatibilityMonitor } from './desktop-compatibility';
+import { settingsVerdictMemory } from './desktop-compatibility-memory';
 import { serverTraffic } from './server-traffic';
 import { appService } from './service';
 
@@ -30,10 +31,11 @@ class DesktopCompatibilityService implements IInitializable, IDisposable {
     },
     onVerdict: (state) => serverTraffic.apply(state),
     intervals: { regular: CHECK_INTERVAL_MS, paused: PAUSED_CHECK_INTERVAL_MS },
+    memory: settingsVerdictMemory,
   });
 
   initialize(): void {
-    this.monitor.start();
+    void this.monitor.start();
   }
 
   getState(): DesktopCompatibility {

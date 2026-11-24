@@ -85,6 +85,9 @@ export const SETTINGS_DEFAULTS = {
   sharing: {
     defaultWorkItemAccess: 'invited' as const,
   },
+  desktopCompatibility: {
+    requiredMinimum: null,
+  },
 } satisfies SettingsDefaultsMap;
 
 export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[K] {
