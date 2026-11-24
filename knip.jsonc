@@ -1,20 +1,36 @@
 // The entries knip cannot infer, beside its defaults and its plugins' (vite, vitest, eslint,
 // GitHub Actions, package.json scripts). Without them their imports read as unused
 // dependencies: docx-preview and recharts, jszip, s3mini (devstation-4x42.180).
+// Each pnpm workspace takes its own entries; an entry list replaces knip's default one, so each
+// list repeats the default index/cli/main patterns.
 {
-  "entry": [
-    "{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
-    "src/{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
-    // The artifact-page runtime: esbuild bundles these in scripts/artifact-runtime/artifact-runtime-plugin.mjs.
-    "src/artifact-runtime/{runtime-entry,chord-page,mermaid-standalone-entry,docx-viewer-entry}.ts",
-    // E2E suites, run as `node scripts/e2e/suites/<suite>.mjs`, and the helpers run on their own
-    // (the e2e build, the UI identity compare, the skill-run launcher the session skills import).
-    "scripts/e2e/suites/*.mjs",
-    "scripts/e2e/lib/{build-e2e-app,ui-identity-compare,skill-run}.mjs",
-    // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
-    "scripts/release/*.ts",
-    // Perf benches, run by hand as `node scripts/perf/<bench>.mjs <appDir>` on .e2e-app and
-    // .e2e-app-base for before/after evidence; results under <e2e out>/perf (devstation-4x42.226).
-    "scripts/perf/*.mjs",
-  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+        "src/{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+        // The artifact-page runtime: esbuild bundles these in scripts/artifact-runtime/artifact-runtime-plugin.mjs.
+        "src/artifact-runtime/{runtime-entry,chord-page,mermaid-standalone-entry,docx-viewer-entry}.ts",
+        // E2E suites, run as `node scripts/e2e/suites/<suite>.mjs`, and the helpers run on their own
+        // (the e2e build, the UI identity compare, the skill-run launcher the session skills import).
+        "scripts/e2e/suites/*.mjs",
+        "scripts/e2e/lib/{build-e2e-app,ui-identity-compare,skill-run}.mjs",
+        // Release CLIs, run as `node --experimental-strip-types scripts/release/<step>.ts`.
+        "scripts/release/*.ts",
+        // Perf benches, run by hand as `node scripts/perf/<bench>.mjs <appDir>` on .e2e-app and
+        // .e2e-app-base for before/after evidence; results under <e2e out>/perf (devstation-4x42.226).
+        "scripts/perf/*.mjs",
+      ],
+    },
+    "server": {
+      "entry": [
+        "{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+        "src/{index,cli,main}.{js,cjs,mjs,jsx,ts,cts,mts,tsx}",
+        // Server e2e probes, run by hand as `npx tsx src/e2e-<probe>.ts` against a running server;
+        // they share src/e2e-harness.ts.
+        "src/e2e-*-probe.ts",
+        "src/e2e-test.ts",
+      ],
+    },
+  },
 }
