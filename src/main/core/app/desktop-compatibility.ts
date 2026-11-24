@@ -130,6 +130,8 @@ export class DesktopCompatibilityMonitor {
       await this.restore();
     } catch (error) {
       // Unreadable, the memory holds nothing: the checks still run, as before it existed.
+      // Failing closed would hold every sender until a reading arrived, and for good
+      // while the server is out of reach.
       log.error('desktop compatibility memory not read', { error: String(error) });
     }
     await this.checkAndSchedule();
@@ -140,6 +142,7 @@ export class DesktopCompatibilityMonitor {
     this.remembered = await this.options.memory.load();
     if (this.remembered === null) return;
     const current = await this.options.currentVersion();
+    // A version the app cannot read is never turned away: nothing says which would be let in.
     if (!SemverSchema.safeParse(current).success) return;
     if (compareVersions(current, this.remembered) >= 0) return;
     this.state = { state: 'update_required', current, minimum: this.remembered };
