@@ -22,8 +22,10 @@ export function builderArgs(options: BuilderOptions): string[] {
     `--${options.platform}`,
     ...options.targets.split(/\s+/).filter((target) => target !== ''),
     `--${options.arch}`,
+    // The builder writes the channel manifests (with releaseNotes) but uploads nothing:
+    // upload-r2.ts is the only uploader, manifests last (F10, devstation-pqub).
     '--publish',
-    'always',
+    'never',
     '--config',
     options.config,
     '--config.npmRebuild=false',

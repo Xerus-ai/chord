@@ -19,8 +19,8 @@ const { values } = parseArgs({
 const isPlatform = (p: string | undefined): p is BuilderOptions['platform'] =>
   p === 'mac' || p === 'linux' || p === 'win';
 const platform = values.platform;
-// Every build here publishes (--publish always), and a published manifest carries the
-// release's notes (F21): changelog.ts --extract writes them.
+// Every build here writes the channel manifests a release publishes (upload-r2.ts uploads
+// them), and a manifest carries the release's notes (F21): changelog.ts --extract writes them.
 const notesArg = values['release-notes'];
 if (!isPlatform(platform) || !notesArg) {
   fail(

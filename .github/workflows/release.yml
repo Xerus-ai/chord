@@ -1,0 +1,374 @@
+# Cuts a release from a merged release PR (devstation-pqub).
+# /release merges a PR whose one commit is `chore(release): vX.Y.Z (<bead>)`. When CI passes
+# on that merge, this workflow runs: preflight decides from the commit whether it is a release
+# (release-preflight.ts), the tag is created with the release app's token (the only bypass of
+# the v* ruleset), the server deploys if the range touched it, three platforms build, and
+# publish puts the installers on a draft GitHub Release and on R2, manifests last (F10), then
+# makes the release public. The probe checks what an updating app would download (F14).
+#
+# Every job checks out the CI run's head_sha, never main's tip. Event data reaches run:
+# scripts only through env (scripts/release/release-workflow.test.ts holds the file to this).
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# One release at a time. queue: max keeps every pending run: with the default, a release
+# queued behind another could be dropped and cut later at a commit carrying an extra PR.
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  preflight:
+    name: preflight
+    # branches: [main] alone also matches a fork PR whose branch is named main.
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      rerun: ${{ steps.decide.outputs.rerun }}
+      tag: ${{ steps.decide.outputs.tag }}
+      previous: ${{ steps.decide.outputs.previous }}
+      channel: ${{ steps.decide.outputs.channel }}
+      server: ${{ steps.decide.outputs.server }}
+      min_desktop_raised: ${{ steps.decide.outputs.min_desktop_raised }}
+      deployed: ${{ steps.decide.outputs.deployed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # Every tag: the release decision and the migration lint read them.
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+      - name: Release, rerun or nothing
+        id: decide
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          # The tag the live server runs starts the server range: a tag whose deploy failed
+          # still owes its server changes to the next release.
+          HEALTH_URL: https://api.chord.xerus.ai/health
+        run: node --experimental-strip-types scripts/release/release-preflight.ts --sha "$SHA" --health-url "$HEALTH_URL"
+      - name: Migrations are safe for the live release (F8)
+        if: steps.decide.outputs.release == 'true'
+        env:
+          # The tag the live server runs, not the newest tag: after a failed deploy a contract
+          # migration must still be safe for the release that is actually live.
+          DEPLOYED: ${{ steps.decide.outputs.deployed }}
+        run: |
+          if [ -n "$DEPLOYED" ]; then
+            node --experimental-strip-types scripts/release/migration-lint.ts --since "$DEPLOYED"
+          else
+            node --experimental-strip-types scripts/release/migration-lint.ts
+          fi
+
+  tag:
+    name: tag
+    needs: preflight
+    if: needs.preflight.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: The release app's token (the v* ruleset's bypass actor)
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Create and push the tag
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+          RERUN: ${{ needs.preflight.outputs.rerun }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          if [ "$RERUN" = true ]; then
+            echo "$TAG is already at $SHA: a rerun of this release"
+            exit 0
+          fi
+          git -c user.name="$APP_SLUG[bot]" -c user.email="$APP_SLUG[bot]@users.noreply.github.com" \
+            tag -a "$TAG" -m "$TAG" "$SHA"
+          git push origin "refs/tags/$TAG"
+
+  # Before publish when the range touched server/ or packages/protocol/ (F7): a client must not
+  # reach users before the server it needs (server/DEPLOYMENT.md section 7). A range that raises
+  # MIN_DESKTOP_VERSION deploys after the probe instead (server-deploy-late).
+  server-deploy:
+    name: server deploy
+    needs: [preflight, tag]
+    if: >-
+      needs.preflight.outputs.release == 'true' &&
+      needs.preflight.outputs.server == 'true' &&
+      needs.preflight.outputs.min_desktop_raised != 'true'
+    runs-on: ubuntu-24.04
+    # deploy.sh installs, builds and migrates on the box (migrate alone may take 15 minutes),
+    # and the lock retries wait up to 4 minutes more.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: The deploy key and the box's pinned host key
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          printf '%s\n' "$SSH_KEY" >"$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" >"$RUNNER_TEMP/known_hosts"
+      - name: Deploy the server (deploy.sh on the box)
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          DEPLOY_KEY_FILE="$RUNNER_TEMP/deploy_key" DEPLOY_KNOWN_HOSTS_FILE="$RUNNER_TEMP/known_hosts" \
+            bash scripts/release/deploy-server.sh "$TAG" "$SHA"
+
+  build:
+    name: build (${{ matrix.platform }} ${{ matrix.arch }})
+    needs: [preflight, tag]
+    if: needs.preflight.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: mac, arch: arm64, runner: macos-15 }
+          - { platform: linux, arch: x64, runner: ubuntu-24.04 }
+          - { platform: win, arch: x64, runner: windows-2025 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      TAG: ${{ needs.preflight.outputs.tag }}
+      CHANNEL: ${{ needs.preflight.outputs.channel }}
+      PLATFORM: ${{ matrix.platform }}
+      ARCH: ${{ matrix.arch }}
+      # The bucket app-update.yml points at (the variable, not app-identity's default).
+      R2_BASE_URL: ${{ vars.R2_BASE_URL }}
+      # Unsigned until signing is provisioned (D8).
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      NODE_OPTIONS: --max-old-space-size=4096
+      # The production addresses the packaged app is built with (scripts/release/lib/build-env.ts;
+      # devstation-czxn): CHORD_RELEASE_BUILD makes electron.vite.config.ts bake them, refusing a
+      # missing one or one that is not https:// or wss://. Identity values are repository variables
+      # (Settings > Variables), never written here: this repository is public.
+      CHORD_RELEASE_BUILD: '1'
+      WORKOS_CLIENT_ID: ${{ vars.WORKOS_CLIENT_ID }}
+      WORKOS_REDIRECT_URI: https://api.chord.xerus.ai/auth/callback
+      WORKOS_AUTHKIT_URL: ${{ vars.WORKOS_AUTHKIT_URL }}
+      GITHUB_OAUTH_CLIENT_ID: ${{ vars.CHORD_GITHUB_OAUTH_CLIENT_ID }}
+      CHORD_AUTH_SERVER_URL: https://api.chord.xerus.ai
+      CHORD_CLOUD_API_URL: https://api.chord.xerus.ai
+      CHORD_DOCS_URL: https://chord.xerus.ai/docs
+      CHORD_ISSUES_URL: https://github.com/Xerus-ai/chord/issues
+      CHORD_RELEASES_URL: https://github.com/Xerus-ai/chord/releases
+      CHORD_TERMS_URL: https://chord.xerus.ai/terms
+      CHORD_PRIVACY_URL: https://chord.xerus.ai/privacy
+      VITE_CLOUD_API_URL: https://api.chord.xerus.ai
+      VITE_CLOUD_WS_URL: wss://api.chord.xerus.ai/ws
+      VITE_COLLAB_WS_URL: wss://api.chord.xerus.ai:1235
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: rpm, for the linux rpm target
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Release notes (F21)
+        run: node --experimental-strip-types scripts/release/changelog.ts --extract "$TAG" --out "release-notes/$TAG.md"
+      - name: Build and package
+        run: |
+          [ -n "$R2_BASE_URL" ] || { echo "::error::the R2_BASE_URL repository variable is empty"; exit 1; }
+          config=electron-builder.config.ts
+          if [ "$CHANNEL" = canary ]; then
+            export VITE_BUILD=canary
+            config=electron-builder.canary.config.ts
+          fi
+          pnpm run build
+          node --experimental-strip-types scripts/release/build.ts --platform "$PLATFORM" --arch "$ARCH" \
+            --config "$config" --release-notes "release-notes/$TAG.md"
+      - name: The release dir matches its manifests (F25)
+        run: node --experimental-strip-types scripts/release/verify-release-dir.ts --tag "$TAG"
+      - name: The mac app's architecture (unsigned, D8)
+        if: matrix.platform == 'mac'
+        run: node --experimental-strip-types scripts/release/verify-mac.ts --unsigned
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            release/*.yml
+            !release/builder-debug.yml
+            release/*.blockmap
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.msi
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+
+  publish:
+    name: publish
+    needs: [preflight, tag, build, server-deploy]
+    # server-deploy is skipped when the range does not need it (or deploys after the probe);
+    # then publish still runs. A failed or cancelled deploy stops it: no manifest is written.
+    if: >-
+      !cancelled() &&
+      needs.preflight.outputs.release == 'true' &&
+      needs.tag.result == 'success' &&
+      needs.build.result == 'success' &&
+      (needs.server-deploy.result == 'success' ||
+      (needs.server-deploy.result == 'skipped' &&
+      (needs.preflight.outputs.server != 'true' || needs.preflight.outputs.min_desktop_raised == 'true')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.preflight.outputs.tag }}
+      CHANNEL: ${{ needs.preflight.outputs.channel }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+      - name: Release notes (F21)
+        run: node --experimental-strip-types scripts/release/changelog.ts --extract "$TAG" --out "release-notes/$TAG.md"
+      - name: The draft GitHub Release, with every installer, blockmap and manifest
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --draft --verify-tag --title "$TAG" --notes-file "release-notes/$TAG.md"
+          fi
+      - name: R2, installers and blockmaps first, manifests last (F10)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          major=${TAG#v}
+          major=${major%%.*}
+          prefix=chord
+          if [ "$CHANNEL" = canary ]; then prefix=chord-canary; fi
+          node --experimental-strip-types scripts/release/upload-r2.ts --channel "v$major-$CHANNEL" --prefix "$prefix"
+      - name: The release goes public
+        run: |
+          kind=--latest
+          if [ "$CHANNEL" = canary ]; then kind=--prerelease; fi
+          gh release edit "$TAG" --draft=false "$kind" --notes-file "release-notes/$TAG.md"
+
+  probe:
+    name: probe
+    needs: [preflight, publish]
+    if: "!cancelled() && needs.publish.result == 'success'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TAG: ${{ needs.preflight.outputs.tag }}
+      R2_BASE_URL: ${{ vars.R2_BASE_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: What an updating app downloads (F14)
+        run: node --experimental-strip-types scripts/release/probe.ts --tag "$TAG" --base "$R2_BASE_URL" --out probe/probe.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: probe
+          path: probe/probe.json
+          if-no-files-found: ignore
+
+  # A range that raises MIN_DESKTOP_VERSION (server/DEPLOYMENT.md section 7, devstation-mg6u.24):
+  # the server deploys only after this release's probe passes and every channel serves a
+  # release that meets the new minimum. Until then the live server keeps the old minimum.
+  server-deploy-late:
+    name: server deploy (raises the minimum desktop version)
+    needs: [preflight, tag, probe]
+    if: >-
+      !cancelled() &&
+      needs.preflight.outputs.min_desktop_raised == 'true' &&
+      needs.probe.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TAG: ${{ needs.preflight.outputs.tag }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      R2_BASE_URL: ${{ vars.R2_BASE_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The deploy key and the box's pinned host key
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          printf '%s\n' "$SSH_KEY" >"$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" >"$RUNNER_TEMP/known_hosts"
+      - name: Deploy the server once every channel meets the new minimum
+        env:
+          DEPLOY_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          node --experimental-strip-types scripts/release/verify-min-desktop.ts --tag "$TAG" --base "$R2_BASE_URL"
+          DEPLOY_KEY_FILE="$RUNNER_TEMP/deploy_key" DEPLOY_KNOWN_HOSTS_FILE="$RUNNER_TEMP/known_hosts" \
+            bash scripts/release/deploy-server.sh "$TAG" "$SHA"
