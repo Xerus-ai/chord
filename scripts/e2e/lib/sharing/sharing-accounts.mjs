@@ -7,6 +7,7 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
+import { versionHeaders, withVersionParam } from '../client-version.mjs';
 import { e2eSource } from '../e2e-source.mjs';
 import { launchSeededApp } from '../seeded-app.mjs';
 
@@ -68,6 +69,7 @@ export async function launchAccount({ seedProfile, label, reopenProfile, env = {
       method,
       headers: {
         Authorization: `Bearer ${await token()}`,
+        ...versionHeaders(),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -128,7 +130,10 @@ export async function launchAccount({ seedProfile, label, reopenProfile, env = {
  */
 export function openDocument(token, artifactId, timeoutMs = 20_000) {
   const document = new Y.Doc();
-  const socket = new HocuspocusProviderWebsocket({ url: COLLAB_URL, WebSocketPolyfill: WebSocket });
+  const socket = new HocuspocusProviderWebsocket({
+    url: withVersionParam(COLLAB_URL),
+    WebSocketPolyfill: WebSocket,
+  });
   const state = { denied: null, closed: false, readOnly: null };
   let settle;
   const ready = new Promise((resolve) => {

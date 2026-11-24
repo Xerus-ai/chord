@@ -231,12 +231,17 @@ export default defineConfig({
             '@base-ui/react/tooltip',
             '@base-ui/react/button',
             'react/jsx-dev-runtime',
+            // The collab hook's, first loaded by renderer-sockets-version (devstation-mg6u.13).
+            '@hocuspocus/provider',
+            'y-indexeddb',
+            'yjs',
           ],
         },
         // The renderer's sync-server base points at the local API stand-in its
         // globalSetup serves, never at the server in .env (devstation-mg6u.13).
         define: {
           'import.meta.env.VITE_CLOUD_API_URL': JSON.stringify('http://127.0.0.1:63410'),
+          'import.meta.env.VITE_CLOUD_WS_URL': JSON.stringify('ws://127.0.0.1:63410/ws'),
         },
         test: {
           name: 'browser',

@@ -7,7 +7,8 @@ import { createServer, type Server } from 'node:http';
  * reaches a real server. It answers CORS preflights as the real server's cors
  * middleware does (the requesting origin and requested headers reflected), so
  * a header the real server would refuse to accept cross-origin fails here too.
- * GET /__seen lists each request it served, with the X-Chord-Version it carried.
+ * GET /__seen lists each request it served, with the X-Chord-Version it carried,
+ * and each socket upgrade, with the chord_version its URL named.
  */
 export const BROWSER_TEST_CLOUD_API_PORT = 63410;
 
@@ -45,6 +46,17 @@ export async function setup(): Promise<void> {
     });
     res.setHeader('Content-Type', 'application/json');
     res.end('{}');
+  });
+  // A socket's upgrade is recorded with the version its URL names, then dropped:
+  // the tests read what the client asked for, not a live socket.
+  server.on('upgrade', (req, socket) => {
+    const url = new URL(req.url ?? '/', 'http://stand-in');
+    seen.push({
+      method: 'UPGRADE',
+      path: url.pathname,
+      version: url.searchParams.get('chord_version'),
+    });
+    socket.destroy();
   });
   await new Promise<void>((resolve, reject) => {
     server!.once('error', reject);

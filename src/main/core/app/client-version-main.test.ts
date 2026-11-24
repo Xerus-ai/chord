@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 import { CHORD_VERSION_HEADER, CHORD_VERSION_PARAM, SemverSchema } from '@chord/protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * The main process names its version on every request to the sync server
- * (devstation-mg6u.13): the server refuses a request without it, so a call
- * that forgets the header is an app locked out of its own API. Driven against a
- * real local HTTP server that records what main sent: the shared cloud fetch,
- * the sync profile lookup reconcile makes, and the device socket's upgrade.
+ * (devstation-mg6u.13): the server refuses a request without it, so a caller
+ * that builds its own request and forgets the header locks that feature out
+ * (Team Pulse did, in review round 1). Driven against a real local HTTP server
+ * that records what main sent: the shared cloud fetch, the sync profile lookup
+ * reconcile makes, the account service's own sync-profile post, Team Pulse's
+ * activity read, and the device socket's upgrade.
  */
 vi.mock('electron', async () => {
   const { electronWithTestKeychain } = await import('@main/core/account/_testing/test-keychain');
@@ -25,19 +27,10 @@ vi.mock('@main/db/client', async () => {
   return { db: createMigratedTestDb() };
 });
 
-const { signInTestAccount } = await import('@main/core/account/_testing/test-account');
-const { cloudFetch } = await import('@main/core/work-items/cloud-work-items-client');
-const { syncQueueService } = await import('@main/core/work-items/sync-queue-service');
-const { deviceSocketService } = await import('@main/core/commands/device-socket-service');
-const { serverTraffic } = await import('./server-traffic');
-const { appService } = await import('./service');
-
-type Seen = { url: string; version: string | undefined };
+type Seen = { method: string; url: string; version: string | undefined };
 const requests: Seen[] = [];
 const upgrades: string[] = [];
 const openSockets = new Set<Socket>();
-let server: Server;
-const originalApiUrl = process.env.CHORD_CLOUD_API_URL;
 
 function acceptUpgrade(req: IncomingMessage, socket: Socket): void {
   upgrades.push(req.url ?? '');
@@ -58,18 +51,41 @@ function acceptUpgrade(req: IncomingMessage, socket: Socket): void {
   socket.on('error', () => openSockets.delete(socket));
 }
 
-beforeAll(async () => {
-  server = createServer((req, res) => {
-    const header = req.headers[CHORD_VERSION_HEADER.toLowerCase()];
-    requests.push({ url: req.url ?? '', version: Array.isArray(header) ? header[0] : header });
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    if (req.url === '/auth/sync-profile') return res.end(JSON.stringify({ org_id: 'org-v' }));
-    if (req.url?.startsWith('/work-items')) return res.end('[]');
-    res.end('{}');
+// Started before the account config is imported: it reads the auth server's
+// address once, at module load, and the sync server answers sync-profile there.
+const server = createServer((req, res) => {
+  const header = req.headers[CHORD_VERSION_HEADER.toLowerCase()];
+  requests.push({
+    method: req.method ?? '',
+    url: req.url ?? '',
+    version: Array.isArray(header) ? header[0] : header,
   });
-  server.on('upgrade', acceptUpgrade);
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  process.env.CHORD_CLOUD_API_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  if (req.url === '/auth/sync-profile') return res.end(JSON.stringify({ org_id: 'org-v' }));
+  if (req.url?.startsWith('/work-items') || req.url?.includes('/activity-context')) {
+    return res.end('[]');
+  }
+  res.end('{}');
+});
+server.on('upgrade', acceptUpgrade);
+await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+const BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+const originalApiUrl = process.env.CHORD_CLOUD_API_URL;
+const originalAuthUrl = process.env.CHORD_AUTH_SERVER_URL;
+process.env.CHORD_CLOUD_API_URL = BASE;
+process.env.CHORD_AUTH_SERVER_URL = BASE;
+
+const { signInTestAccount } = await import('@main/core/account/_testing/test-account');
+const { chordAccountService } = await import('@main/core/account/services/chord-account-service');
+const { cloudFetch } = await import('@main/core/work-items/cloud-work-items-client');
+const { syncQueueService } = await import('@main/core/work-items/sync-queue-service');
+const { deviceSocketService } = await import('@main/core/commands/device-socket-service');
+const { encryptedAppSecretsStore } = await import('@main/core/secrets/encrypted-app-secrets-store');
+const { generateTeamPulse } = await import('@main/core/openrouter/team-pulse-generator');
+const { serverTraffic } = await import('./server-traffic');
+const { appService } = await import('./service');
+
+beforeAll(async () => {
   await signInTestAccount({ username: 'vera', email: 'vera@example.com' });
   serverTraffic.apply({ state: 'supported', current: '1.0.0', minimum: '0.1.0' });
 });
@@ -79,21 +95,47 @@ afterAll(async () => {
   for (const socket of openSockets) socket.destroy();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   process.env.CHORD_CLOUD_API_URL = originalApiUrl;
+  process.env.CHORD_AUTH_SERVER_URL = originalAuthUrl;
 });
+
+/** The requests to `path` since `from`, each with the version it named. */
+const sentTo = (path: string, from: number) =>
+  requests.slice(from).filter((r) => r.url.startsWith(path));
 
 describe('main names its version to the sync server', () => {
   it('on the shared cloud fetch and on the sync profile lookup', async () => {
     const version = await appService.getCachedAppVersion();
     expect(SemverSchema.safeParse(version).success).toBe(true);
+    const from = requests.length;
 
     await cloudFetch('/work-items/member-summary');
     await syncQueueService.reconcileLocalWorkItems();
 
-    const sent = requests.filter((r) => r.url !== '/health');
+    const sent = requests.slice(from).filter((r) => r.url !== '/health');
     expect(sent.map((r) => r.url)).toEqual(
       expect.arrayContaining(['/work-items/member-summary', '/auth/sync-profile'])
     );
     for (const r of sent) expect(r.version, r.url).toBe(version);
+  });
+
+  it("on the account service's own sync-profile post (choosing an org)", async () => {
+    const version = await appService.getCachedAppVersion();
+    const from = requests.length;
+    await chordAccountService.setActiveOrg('org-v');
+    const posts = sentTo('/auth/sync-profile', from).filter((r) => r.method === 'POST');
+    expect(posts.length).toBe(1);
+    expect(posts[0]!.version).toBe(version);
+  });
+
+  it("on Team Pulse generation's read of the team's activity", async () => {
+    const version = await appService.getCachedAppVersion();
+    await encryptedAppSecretsStore.setSecret('chord-openrouter-api-key', 'test-key');
+    const from = requests.length;
+    const result = await generateTeamPulse('org-v', BASE);
+    expect(result).toEqual({ success: true, count: 0 });
+    const reads = sentTo('/team-pulse/org-v/activity-context', from);
+    expect(reads.length).toBe(1);
+    expect(reads[0]!.version).toBe(version);
   });
 
   it('on the device socket upgrade, as a query parameter', async () => {
