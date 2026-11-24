@@ -81,7 +81,10 @@ async function checkShell(page) {
   // The e2e build is unpackaged, so it has no updater: from the first look the card
   // must say so, not "You're up to date." (devstation-mg6u.52).
   const updates = page.locator('#settings-card-updates');
-  await updates.getByText('cannot update itself').waitFor({ timeout: 10_000 }).catch(() => {});
+  await updates
+    .getByText('cannot update itself')
+    .waitFor({ timeout: 10_000 })
+    .catch(() => {});
   const updatesText = (await updates.textContent()) ?? '';
   verdict(
     'an unpackaged build says it cannot update itself before any check',
