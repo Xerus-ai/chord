@@ -80,7 +80,8 @@ export class GitStateCaptureService implements IInitializable, IDisposable {
   }
 
   private async tick(): Promise<void> {
-    // Turned away by the version handshake: no polling either (mg6u.5).
+    // Turned away by the version handshake: no polling either. It needs no
+    // resume hook: the next tick after traffic reopens picks up from here.
     if (this.running || !serverTraffic.isOpen()) return;
     this.running = true;
     try {

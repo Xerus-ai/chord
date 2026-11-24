@@ -21,6 +21,12 @@ export interface SyncQueueHealth {
   lastSuccessfulDrainAt: number | null;
   /** True while org resolution answers "no org" — work-item creates are held. */
   orgUnresolved: boolean;
+  /**
+   * Unix seconds of the last time traffic reopened after a pause, null if it
+   * never paused in this process: staleness counts from the later of this and
+   * lastSuccessfulDrainAt, so a pause is never read as a stalled drain.
+   */
+  resumedAt: number | null;
 }
 
 /**
@@ -33,9 +39,14 @@ export interface SyncQueueHealth {
  */
 class SyncQueueHealthTracker {
   private orgUnresolved = false;
+  private resumedAt: number | null = null;
 
   setOrgResolution(resolved: boolean): void {
     this.orgUnresolved = !resolved;
+  }
+
+  recordResume(atSeconds: number): void {
+    this.resumedAt = atSeconds;
   }
 
   async recordDrainSuccess(atSeconds: number): Promise<void> {
@@ -54,6 +65,7 @@ class SyncQueueHealthTracker {
       oldestPendingAt: agg?.oldest ?? null,
       lastSuccessfulDrainAt: (await syncHealthKV.get('lastSuccessfulDrainAt')) ?? null,
       orgUnresolved: this.orgUnresolved,
+      resumedAt: this.resumedAt,
     };
   }
 }

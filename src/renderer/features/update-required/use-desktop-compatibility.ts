@@ -7,7 +7,7 @@ import { events, rpc } from '@renderer/lib/ipc';
 const KEY = ['app', 'desktop-compatibility'] as const;
 
 /**
- * The sync server's verdict on this app's version (devstation-mg6u.2): read once
+ * The sync server's verdict on this app's version: read once
  * from main, then replaced by each change main reports.
  */
 export function useDesktopCompatibility() {

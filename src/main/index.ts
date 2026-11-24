@@ -20,11 +20,10 @@ import { chordAccountService } from './core/account/services/chord-account-servi
 import { registerProtocolHandler } from './core/account/services/workos-auth-service';
 import { agentHookService } from './core/agent-hooks/agent-hook-service';
 import { desktopCompatibilityService } from './core/app/desktop-compatibility-service';
-import { serverTraffic } from './core/app/server-traffic';
 import { appService } from './core/app/service';
+import { startServerSenders, stopServerSenders } from './core/app/start-server-senders';
 import { setupArtifactPageProtocol } from './core/artifact-pages/artifact-page-protocol';
 import { configureArtifactRuntimeDir } from './core/artifact-pages/artifact-runtime-dir';
-import { commandInboxService } from './core/commands/command-inbox-service';
 import { deviceSocketService } from './core/commands/device-socket-service';
 import { permissionPublicationService } from './core/commands/permission-publication-service';
 import { planPublicationService } from './core/commands/plan-publication-service';
@@ -41,7 +40,6 @@ import { repoIconBackfill } from './core/repos/repo-icon-backfill';
 import { appSettingsService } from './core/settings/settings-service';
 import { hasSoloHolds, recoverSoloSlotsOnBoot, settleSoloOnQuit } from './core/solo/solo-boot';
 import { updateService } from './core/updates/update-service';
-import { gitStateCaptureService } from './core/work-items/git-state-capture';
 import { flushAllPartialTurns, initializeSessions } from './core/work-items/session-service';
 import { startSharedRegistrySync } from './core/work-items/shared-registry-sync';
 import { syncQueueService } from './core/work-items/sync-queue-service';
@@ -154,17 +152,12 @@ void app.whenReady().then(async () => {
     log.warn('telemetry init failed:', e);
   }
 
-  // Nothing reaches the sync server before it has judged this version
-  // (devstation-mg6u.5): desktopCompatibilityService's first reading releases it.
-  serverTraffic.hold();
-  gitWatcherRegistry.initialize();
-  prSyncScheduler.initialize();
-  syncQueueService.initialize();
   // For the app's lifetime; registered before the first shared-set refresh.
   startSharedRegistrySync();
-  gitStateCaptureService.initialize();
-  commandInboxService.initialize();
-  deviceSocketService.initialize();
+  // Nothing reaches the sync server before it has judged this version.
+  startServerSenders();
+  gitWatcherRegistry.initialize();
+  prSyncScheduler.initialize();
   // A new item's room is joined once the cloud has it, not on the next sweep.
   onWorkItemCloudCreated((workItemId) => deviceSocketService.joinWorkItemRoom(workItemId));
   appService.initialize();
@@ -256,11 +249,8 @@ app.on('before-quit', (event) => {
   agentHookService.dispose();
   updateService.dispose();
   prSyncScheduler.dispose();
-  syncQueueService.dispose();
-  gitStateCaptureService.dispose();
-  deviceSocketService.dispose();
+  stopServerSenders();
   desktopCompatibilityService.dispose();
-  commandInboxService.dispose();
   void gitWatcherRegistry.dispose();
   projectManager.dispose().catch((e) => {
     log.error('Failed to shutdown project manager:', e);

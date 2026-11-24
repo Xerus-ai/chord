@@ -6,7 +6,7 @@ import type {
   PermissionRequestPutBody,
   PlanRequestPutBody,
 } from '@chord/protocol';
-import { and, count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { isOwnedByAnotherAccount } from '@shared/work-item-ownership';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
 import { serverTraffic } from '@main/core/app/server-traffic';
@@ -23,19 +23,18 @@ import {
   type CloudWorkItemCreateBody,
   type CloudWorkItemPatchBody,
 } from './cloud-work-items-client';
-import { selectEligibleSyncRows } from './sync-queue-eligible-rows';
+import { drainEligibleRows } from './sync-queue-drain';
 import {
   collapseDuplicateFailedCreates,
   reviveCreatesFailedOnConflict,
 } from './sync-queue-failed-rows';
 import { syncQueueHealth } from './sync-queue-health';
-import { processSyncRow } from './sync-queue-process-row';
+import { OwedReconciles } from './sync-queue-owed-reconciles';
 import {
   reconcileLocalArtifactRows,
   reconcileLocalChatRows,
   reconcileLocalWorkItemRows,
 } from './sync-queue-reconcile';
-import { sendSyncOperation } from './sync-queue-send';
 import {
   insertWorkItemDeleteRow,
   mergeOrInsertQueueRow,
@@ -48,10 +47,6 @@ import {
 
 const PROCESS_INTERVAL_MS = 30_000;
 const PROCESS_KICK_DELAY_MS = 500;
-const BATCH_SIZE = 50;
-const MAX_DRAIN_PASSES = 4;
-
-type Reconcile = 'workItems' | 'artifacts' | 'chatMessages';
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
@@ -67,17 +62,29 @@ export class SyncQueueService implements IInitializable, IDisposable {
   private timer: ReturnType<typeof setInterval> | null = null;
   private kickTimer: ReturnType<typeof setTimeout> | null = null;
   private processing = false;
-  // Reconciles asked for while server traffic was closed run when it opens, or
-  // a sign-in during the pause would never reconcile (devstation-mg6u.5).
-  private readonly reconcilesOwed = new Set<Reconcile>();
-
-  constructor() {
-    serverTraffic.subscribe((open) => {
-      if (open) void this.runOwedReconciles();
-    });
-  }
+  private unsubscribeTraffic: (() => void) | null = null;
+  private readonly owed = new OwedReconciles(
+    {
+      workItems: () => this.reconcileLocalWorkItems(),
+      artifacts: () => this.reconcileLocalArtifacts(),
+      chatMessages: () => this.reconcileLocalChatMessages(),
+    },
+    () => this.scheduleProcessing()
+  );
 
   initialize(): void {
+    // Boot's first opening (held -> open) is no resume: only an opening after
+    // a pause restarts the staleness clock.
+    let paused = false;
+    this.unsubscribeTraffic = serverTraffic.subscribe((open) => {
+      if (!open) {
+        paused = true;
+        return;
+      }
+      if (paused) syncQueueHealth.recordResume(nowSeconds());
+      paused = false;
+      void this.owed.runOwed();
+    });
     this.resetInterruptedOperations();
     const collapsed = collapseDuplicateFailedCreates();
     if (collapsed > 0) {
@@ -94,6 +101,8 @@ export class SyncQueueService implements IInitializable, IDisposable {
   }
 
   dispose(): void {
+    this.unsubscribeTraffic?.();
+    this.unsubscribeTraffic = null;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -240,35 +249,20 @@ export class SyncQueueService implements IInitializable, IDisposable {
 
   /** Startup backfill of local work items; see sync-queue-reconcile.ts. */
   async reconcileLocalWorkItems(): Promise<void> {
-    if (this.owe('workItems')) return;
+    if (this.owed.owe('workItems')) return;
     if (await reconcileLocalWorkItemRows()) this.scheduleProcessing();
   }
 
   /** Startup backfill of local artifacts and their device comments. */
   async reconcileLocalArtifacts(): Promise<void> {
-    if (this.owe('artifacts')) return;
+    if (this.owed.owe('artifacts')) return;
     if (await reconcileLocalArtifactRows()) this.scheduleProcessing();
   }
 
   /** Startup backfill of never-synced local chat rows. */
   async reconcileLocalChatMessages(): Promise<void> {
-    if (this.owe('chatMessages')) return;
+    if (this.owed.owe('chatMessages')) return;
     if (await reconcileLocalChatRows()) this.scheduleProcessing();
-  }
-
-  private owe(reconcile: Reconcile): boolean {
-    if (serverTraffic.isOpen()) return false;
-    this.reconcilesOwed.add(reconcile);
-    return true;
-  }
-
-  private async runOwedReconciles(): Promise<void> {
-    const owed = [...this.reconcilesOwed];
-    this.reconcilesOwed.clear();
-    if (owed.includes('workItems')) await this.reconcileLocalWorkItems();
-    if (owed.includes('artifacts')) await this.reconcileLocalArtifacts();
-    if (owed.includes('chatMessages')) await this.reconcileLocalChatMessages();
-    this.scheduleProcessing(); // rows queued while closed
   }
 
   getFailedOperations(): SyncQueueRow[] {
@@ -338,6 +332,8 @@ export class SyncQueueService implements IInitializable, IDisposable {
         return;
       }
       syncQueueHealth.setOrgResolution(orgId !== null);
+      // Paused while the org lookup was in flight: send nothing more this cycle.
+      if (!serverTraffic.isOpen()) return;
       if (!orgId) {
         // Only org-scoped work-item creates need an org; everything else is
         // addressed by work-item/entity id and MUST still drain. A null org
@@ -346,53 +342,14 @@ export class SyncQueueService implements IInitializable, IDisposable {
         log.warn('[sync-queue] org unresolved; draining non-org-scoped operations only');
       }
 
-      await this.drainEligible(orgId);
+      await drainEligibleRows(orgId, (workItemId, artifactId) =>
+        this.enqueueArtifactCommentImport(workItemId, artifactId)
+      );
     } catch (error) {
       log.error('[sync-queue] processing cycle failed', { error: String(error) });
     } finally {
       this.processing = false;
     }
-  }
-
-  private async drainEligible(orgId: string | null): Promise<void> {
-    // A row held back behind another in this cycle (a version upload behind
-    // its artifact's create) becomes eligible once that one is delivered, so
-    // passes repeat while they deliver — bounded, so a steady stream of new
-    // rows cannot keep one cycle running.
-    let delivered = false;
-    for (let pass = 0; pass < MAX_DRAIN_PASSES; pass++) {
-      const rows = selectEligibleSyncRows(orgId, BATCH_SIZE);
-      let deliveredThisPass = false;
-      let stopped = false;
-      for (const row of rows) {
-        // A verdict mid-cycle: the row stays pending, unclaimed, its retries unspent.
-        stopped = !serverTraffic.isOpen();
-        if (stopped) break;
-        const outcome = await processSyncRow(row, (claimed) =>
-          sendSyncOperation(claimed, orgId, (workItemId, artifactId) =>
-            this.enqueueArtifactCommentImport(workItemId, artifactId)
-          )
-        );
-        if (outcome.delivered) deliveredThisPass = true;
-        if (!outcome.proceed) {
-          stopped = true;
-          break;
-        }
-      }
-      delivered ||= deliveredThisPass;
-      if (stopped || !deliveredThisPass) break;
-    }
-
-    // Heartbeat: real progress, or the queue verifiably has nothing waiting.
-    if (!delivered) {
-      const remaining = db
-        .select({ n: count() })
-        .from(syncQueue)
-        .where(eq(syncQueue.status, 'pending'))
-        .get();
-      if ((remaining?.n ?? 0) > 0) return;
-    }
-    await syncQueueHealth.recordDrainSuccess(nowSeconds());
   }
 }
 

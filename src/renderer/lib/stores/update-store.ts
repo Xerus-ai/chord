@@ -29,6 +29,8 @@ export type UpdateState =
   | { status: 'checking' }
   | { status: 'available'; info?: { version: string } }
   | { status: 'not-available' }
+  /** This build has no updater (an unpackaged or dev build): a check cannot run. */
+  | { status: 'unavailable' }
   | { status: 'downloading'; progress?: DownloadProgress }
   | { status: 'downloaded' }
   | { status: 'installing' }
@@ -155,11 +157,12 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
       }
       if (!res.success) {
         set({ state: { status: 'error', message: res.error ?? 'Failed to check for updates' } });
+      } else if (!res.active) {
+        // No updater in this build: it sends no event, so the answer is the only word.
+        set({ state: { status: 'unavailable' } });
       } else if (res.result === null) {
-        // A finished check that found nothing: say so. The updater's own
-        // not-available event says it too, but an inactive updater (an
-        // unpackaged build) sends none, and the update-required screen's
-        // button then looked dead (devstation-mg6u.5 e2e).
+        // A finished check that found nothing. The updater's own not-available
+        // event says so too; this covers a check that ended without one.
         set({ state: { status: 'not-available' } });
       }
     } catch {

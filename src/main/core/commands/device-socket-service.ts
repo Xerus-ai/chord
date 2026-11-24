@@ -94,11 +94,15 @@ class DeviceSocketService implements IInitializable, IDisposable {
   // Work items with a reseed in flight — a gap during a reseed must not
   // stack a second concurrent walk over the same pages.
   private reseeding = new Set<string>();
+  private unsubscribeTraffic: (() => void) | null = null;
 
-  constructor() {
-    // The version handshake (devstation-mg6u.5): a turned-away app drops its
-    // socket and rooms, and reconnects (rejoining in onopen) once supported.
-    serverTraffic.subscribe((open) => {
+  initialize(): void {
+    // A start after dispose() is a restart, as for the other server senders.
+    this.disposed = false;
+    this.attempts = 0;
+    // The version handshake: a turned-away app drops its socket and rooms, and
+    // reconnects (rejoining in onopen) once supported.
+    this.unsubscribeTraffic = serverTraffic.subscribe((open) => {
       if (open) {
         this.kick();
         return;
@@ -109,14 +113,13 @@ class DeviceSocketService implements IInitializable, IDisposable {
       this.handleDisconnect();
       socket?.close();
     });
-  }
-
-  initialize(): void {
     this.scheduleConnect(0);
   }
 
   dispose(): void {
     this.disposed = true;
+    this.unsubscribeTraffic?.();
+    this.unsubscribeTraffic = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.clearJoinQueue();

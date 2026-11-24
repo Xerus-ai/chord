@@ -1,14 +1,16 @@
 /**
- * The renderer half of the version handshake (devstation-mg6u.2, .5), in real
+ * The renderer half of the version handshake, in real
  * Chromium. The gate in front of the app reads main's verdict over RPC and
  * then follows main's change events. The bugs these catch: the workspace (or
  * the sign-in wordmark) painted before the first verdict and then swapped
  * for the update screen; a placeholder that never leaves when the first
  * reading is unknown (server down); and an update screen whose buttons do not
- * reach the updater or the download page.
+ * reach the updater or the download page; a check whose answer leaves the
+ * screen unchanged, or a build with no updater read as "no update found".
  *
- * Only the preload bridge is supplied: invoke answers the verdict and records
- * the updater calls; eventOn hands the test main's change channel.
+ * Only the preload bridge is supplied: invoke answers the verdict, the theme
+ * the gate's screens read, and records the updater calls; eventOn hands the
+ * test main's change channel.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { flushSync } from 'react-dom';
@@ -31,6 +33,8 @@ Object.assign(window, {
       if (channel === 'app.getDesktopCompatibility') return verdict;
       if (channel === 'update.check') return checkAnswer();
       if (channel === 'update.openLatest') return undefined;
+      if (channel === 'appSettings.getWithMeta') return { value: 'chord-dark' };
+      if (channel === 'app.setWindowChromeTheme') return undefined;
       throw new Error(`the gate asked the main process for ${channel}`);
     },
     eventOn: (channel: string, cb: (data: unknown) => void) => {
@@ -136,18 +140,18 @@ describe('the update-required gate', () => {
     expect(calls).toContain('update.check');
 
     const website = [...view.querySelectorAll('button')].find((b) =>
-      /download from the website/i.test(b.textContent ?? '')
+      /download from website/i.test(b.textContent ?? '')
     );
-    if (!website) throw new Error('no Download from the website button');
+    if (!website) throw new Error('no Download from website button');
     await userEvent.click(website);
     await vi.waitFor(() => expect(calls).toContain('update.openLatest'));
   });
 
-  // An inactive updater answers a check with no result and sends no event: the
-  // screen must still say so (it looked dead), announce it, and put the download first.
+  // A check that ends with no result and no updater event: the screen must
+  // still say so, announce it, offer the check again, and put the download first.
   it('a check that finds nothing says so, announces it, and makes the download the primary action', async () => {
     verdict = { state: 'update_required', current: '1.0.0', minimum: '2.0.0' };
-    checkAnswer = async () => ({ success: true, result: null });
+    checkAnswer = async () => ({ success: true, result: null, active: true });
     const view = renderGate();
     const button = (name: RegExp) =>
       [...view.querySelectorAll('button')].find((b) => name.test(b.textContent ?? ''));
@@ -156,7 +160,7 @@ describe('the update-required gate', () => {
       if (!found) throw new Error('no Check for updates button');
       return found;
     });
-    const website = button(/download from the website/i)!;
+    const website = button(/download from website/i)!;
     const primaryFill = getComputedStyle(check).backgroundColor;
     await userEvent.click(check);
     await vi.waitFor(() => expect(view.textContent).toContain('No update was found'));
@@ -168,5 +172,26 @@ describe('the update-required gate', () => {
       expect(getComputedStyle(website).backgroundColor).toBe(primaryFill);
       expect(getComputedStyle(check).backgroundColor).not.toBe(primaryFill);
     });
+    // The check steps back but says it can run again, and can.
+    expect(check.textContent).toBe('Check again');
+    expect(check.disabled).toBe(false);
+  });
+
+  // A build with no updater (unpackaged) cannot check at all: that is said, not
+  // "No update was found".
+  it('a build with no updater says it cannot update itself', async () => {
+    verdict = { state: 'update_required', current: '1.0.0', minimum: '2.0.0' };
+    checkAnswer = async () => ({ success: true, result: null, active: false });
+    const view = renderGate();
+    const check = await vi.waitFor(() => {
+      const found = [...view.querySelectorAll('button')].find((b) =>
+        /check for updates/i.test(b.textContent ?? '')
+      );
+      if (!found) throw new Error('no Check for updates button');
+      return found;
+    });
+    await userEvent.click(check);
+    await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
+    expect(view.textContent).not.toContain('No update was found');
   });
 });
