@@ -233,8 +233,14 @@ export default defineConfig({
             'react/jsx-dev-runtime',
           ],
         },
+        // The renderer's sync-server base points at the local API stand-in its
+        // globalSetup serves, never at the server in .env (devstation-mg6u.13).
+        define: {
+          'import.meta.env.VITE_CLOUD_API_URL': JSON.stringify('http://127.0.0.1:63410'),
+        },
         test: {
           name: 'browser',
+          globalSetup: ['src/renderer/tests/browser/cloud-api-stand-in.setup.ts'],
           // Vitest's browser default, 63315, is inside a port range Windows
           // reserves for Hyper-V/WinNAT on this machine (63232-63331): the
           // Vite server then dies with `listen EACCES ::1:63315` as an
