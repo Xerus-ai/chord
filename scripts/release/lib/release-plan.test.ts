@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { nextReleaseTag, parseReleaseTag, readReleasePlan } from './release-plan.ts';
 
@@ -113,5 +113,74 @@ describe('readReleasePlan', () => {
     const wip = git('rev-parse', '--short=12', 'HEAD~1');
 
     expect(() => readReleasePlan(repo)).toThrow(new RegExp(`${wip} wip[\\s\\S]*fix: no bead`));
+  });
+});
+
+describe('a canary release', () => {
+  it('before any release is v1.0.0-canary.1, over the whole history', () => {
+    const { repo } = createRepo(['chore: one (t-1)', 'fix(main): two (t-2)']);
+
+    const plan = readReleasePlan(repo, 'canary');
+
+    expect(plan.from).toBeNull();
+    expect(plan.tag).toBe('v1.0.0-canary.1');
+    expect(plan.commits).toHaveLength(2);
+  });
+
+  it('counts on from the last canary of that version, and a canary never moves the base', () => {
+    const { repo, git } = createRepo(['chore: one (t-1)', 'fix(main): two (t-2)'], {
+      0: 'v1.0.0',
+      1: 'v1.0.1-canary.1',
+    });
+    // the highest canary of the version counts, wherever it sits: a tag name is global
+    git('tag', '-a', 'v1.0.1-canary.3', '-m', 'v1.0.1-canary.3', 'HEAD~1');
+    writeFileSync(join(repo, 'later.txt'), 'later\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'fix(main): three (t-3)');
+
+    const plan = readReleasePlan(repo, 'canary');
+
+    expect(plan.tag).toBe('v1.0.1-canary.4');
+    expect(plan.from).toBe('v1.0.0');
+    expect(plan.commits.map((c) => c.subject)).toEqual([
+      'fix(main): two (t-2)',
+      'fix(main): three (t-3)',
+    ]);
+  });
+
+  it('after a stable release takes the next version, a feature bumping the minor', () => {
+    const { repo } = createRepo(['chore: one (t-1)', 'feat(main): two (t-2)'], {
+      0: 'v1.2.3',
+    });
+
+    expect(readReleasePlan(repo, 'canary').tag).toBe('v1.3.0-canary.1');
+    expect(readReleasePlan(repo).tag).toBe('v1.3.0');
+  });
+});
+
+describe('release-plan.ts', () => {
+  const cli = resolve(import.meta.dirname, '..', 'release-plan.ts');
+  const run = (repo: string, args: string[], env: Record<string, string> = {}) =>
+    execFileSync(process.execPath, [cli, ...args], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...process.env, CHORD_RELEASE_CHANNEL: '', ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+  it('prints the canary tag under CHORD_RELEASE_CHANNEL=canary or --channel canary', () => {
+    const { repo } = createRepo(['fix(main): one (t-1)']);
+
+    expect(JSON.parse(run(repo, ['--json'])).tag).toBe('v1.0.0');
+    expect(JSON.parse(run(repo, ['--json'], { CHORD_RELEASE_CHANNEL: 'canary' })).tag).toBe(
+      'v1.0.0-canary.1'
+    );
+    expect(JSON.parse(run(repo, ['--json', '--channel', 'canary'])).tag).toBe('v1.0.0-canary.1');
+  });
+
+  it('refuses a channel it does not know', () => {
+    const { repo } = createRepo(['fix(main): one (t-1)']);
+
+    expect(() => run(repo, ['--json', '--channel', 'beta'])).toThrow(/stable or canary/);
   });
 });
