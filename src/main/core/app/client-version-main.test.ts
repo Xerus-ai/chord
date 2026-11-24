@@ -127,6 +127,19 @@ describe('main names its version to the sync server', () => {
     expect(posts[0]!.version).toBe(version);
   });
 
+  it("on the account service's session check", async () => {
+    const version = await appService.getCachedAppVersion();
+    await chordAccountService.loadSessionToken();
+    const from = requests.length;
+    await chordAccountService.validateSession();
+    const checks = sentTo('/api/auth/get-session', from);
+    expect(checks.length).toBe(1);
+    expect(checks[0]!.version).toBe(version);
+  });
+
+  // Team Pulse's two sync-server requests (the activity read and the summaries
+  // post) go through one request function, so this read covers the header both
+  // send; the post itself needs a live model completion to be reached.
   it("on Team Pulse generation's read of the team's activity", async () => {
     const version = await appService.getCachedAppVersion();
     await encryptedAppSecretsStore.setSecret('chord-openrouter-api-key', 'test-key');
