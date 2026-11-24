@@ -37,20 +37,23 @@ export function UpdateCard(): React.JSX.Element {
         description={renderStatusMessage()}
         control={
           <div className="flex items-center gap-2">
-            {updateState.status !== 'downloaded' && updateState.status !== 'installing' && (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                onClick={() => check()}
-                disabled={updateState.status === 'checking'}
-                aria-label="Check for updates"
-              >
-                <RefreshCw
-                  className={`h-3 w-3 ${updateState.status === 'checking' ? 'animate-spin' : ''}`}
-                />
-              </Button>
-            )}
+            {/* A build that cannot update itself gets no re-check: it would only repeat its note. */}
+            {updateState.status !== 'downloaded' &&
+              updateState.status !== 'installing' &&
+              updateState.status !== 'unavailable' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => check()}
+                  disabled={updateState.status === 'checking'}
+                  aria-label="Check for updates"
+                >
+                  <RefreshCw
+                    className={`h-3 w-3 ${updateState.status === 'checking' ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+              )}
             {renderAction()}
           </div>
         }
