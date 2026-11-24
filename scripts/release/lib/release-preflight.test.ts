@@ -75,9 +75,7 @@ describe('readReleaseDecision: release, rerun or not a release', () => {
     // The release merge's push event was lost (no CI, no release.yml); the next main commit
     // still names the untagged version and must cut it, or the release is stranded for good.
     const r = createReleasedRepo();
-    r.mergePr('release/v1.1.0', [
-      [RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])],
-    ]);
+    r.mergePr('release/v1.1.0', [[RELEASE('v1.1.0'), releaseFiles('1.1.0', ['v1.1.0', 'v1.0.0'])]]);
     const head = r.mergePr('fix/d', [['fix(main): d (t-5)', { 'src/main/d.ts': 'export {};\n' }]]);
 
     await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
