@@ -1,24 +1,25 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { parseArgs } from 'node:util';
 import { RELEASE_DIR } from './lib/config.ts';
 import { exec, execOrNull } from './lib/exec.ts';
 import { fail, info, step, warn } from './lib/log.ts';
 import { macNativeModule } from './lib/mac-native-module.ts';
+import { readVerifyMacOptions, type VerifyMacOptions } from './lib/verify-mac-options.ts';
 
 if (process.platform !== 'darwin') {
   console.log('Not macOS — skipping verification.');
   process.exit(0);
 }
 
-const { values } = parseArgs({
-  options: {
-    'expected-team-id': { type: 'string' },
-  },
-  strict: true,
-});
+function readOptions(): VerifyMacOptions {
+  try {
+    return readVerifyMacOptions(process.argv.slice(2));
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
 
-const expectedTeamId = values['expected-team-id'];
+const { codesign, expectedTeamId } = readOptions();
 
 const appBundles = readdirSync(RELEASE_DIR)
   .filter((d) => d.startsWith('mac'))
@@ -76,7 +77,11 @@ for (const appDir of appBundles) {
     info(`CFBundleIdentifier: ${bid}`);
   }
 
-  exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
+  if (!codesign) {
+    warn(`UNSIGNED (D8): skipped the codesign checks of ${appDir}`);
+  } else {
+    exec(`codesign --verify --deep --strict --verbose=2 "${appDir}"`, { echo: true });
+  }
 
   if (expectedTeamId) {
     const meta = exec(`codesign -dv --verbose=4 "${appDir}" 2>&1`);

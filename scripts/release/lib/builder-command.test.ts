@@ -36,7 +36,7 @@ describe('builderArgs', () => {
       'msi',
       '--x64',
       '--publish',
-      'always',
+      'never',
       '--config',
       'electron-builder.config.ts',
       '--config.npmRebuild=false',
