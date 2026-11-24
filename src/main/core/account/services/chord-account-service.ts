@@ -307,7 +307,10 @@ export class ChordAccountService {
     try {
       const response = await fetch(`${baseUrl}/api/auth/get-session`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.sessionToken}` },
+        headers: {
+          Authorization: `Bearer ${this.sessionToken}`,
+          [CHORD_VERSION_HEADER]: APP_VERSION,
+        },
         signal: AbortSignal.timeout(3000),
       });
 

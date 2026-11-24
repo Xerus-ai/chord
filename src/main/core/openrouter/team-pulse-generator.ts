@@ -1,3 +1,5 @@
+import { CHORD_VERSION_HEADER } from '@chord/protocol';
+import { APP_VERSION } from '@shared/app-version';
 import { chordAccountService } from '@main/core/account/services/chord-account-service';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { log } from '@main/lib/logger';
@@ -103,7 +105,11 @@ export async function generateTeamPulse(
   let members: MemberActivity[];
   try {
     const res = await fetch(`${cloudApiBase}/team-pulse/${orgId}/activity-context`, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        [CHORD_VERSION_HEADER]: APP_VERSION,
+        'Content-Type': 'application/json',
+      },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     members = (await res.json()) as MemberActivity[];
@@ -172,6 +178,7 @@ export async function generateTeamPulse(
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
+        [CHORD_VERSION_HEADER]: APP_VERSION,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ summaries }),
