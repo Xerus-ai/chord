@@ -41,6 +41,10 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # actions: read lets preflight ask whether CI ran on a release merge (a lost push event).
+    permissions:
+      contents: read
+      actions: read
     outputs:
       release: ${{ steps.decide.outputs.release }}
       rerun: ${{ steps.decide.outputs.rerun }}
@@ -66,6 +70,7 @@ jobs:
           # The tag the live server runs starts the server range: a tag whose deploy failed
           # still owes its server changes to the next release.
           HEALTH_URL: https://api.chord.xerus.ai/health
+          GH_TOKEN: ${{ github.token }}
         run: node --experimental-strip-types scripts/release/release-preflight.ts --sha "$SHA" --health-url "$HEALTH_URL"
       - name: Migrations are safe for the live release (F8)
         if: steps.decide.outputs.release == 'true'
