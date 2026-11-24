@@ -1,12 +1,13 @@
-/* global window, document, getComputedStyle -- page.evaluate and waitForFunction callbacks run inside the app window */
+/* global window, document, getComputedStyle, MutationObserver -- page.evaluate and waitForFunction callbacks run inside the app window */
 /**
  * Live check of the version handshake, driven through the
  * real app: the main process reads <CHORD_CLOUD_API_URL>/health and compares
  * the app's version with the server's min_desktop_version.
  *   - a server whose minimum is above the app's version: the app shows the
  *     "Update required" screen naming both versions, and not the workspace;
- *     Check for updates shows the updater working (or its answer), and Download
- *     from website opens the releases page and quits;
+ *     an unpackaged build says it cannot update itself before any click (the
+ *     boot update check's answer), Check again asks again and gets the same
+ *     answer, and Download from website opens the releases page and quits;
  *   - a server whose minimum IS the app's version (the equality boundary): the
  *     app goes on to its normal first screen (sign-in, on a fresh profile);
  *   - no server at all: the first reading is unknown, which never blocks, so the
@@ -197,24 +198,48 @@ async function main() {
         (await page.getByTitle('Settings', { exact: true }).count()) === 0,
       ''
     );
-    const check = page.getByRole('button', { name: /check for updates/i });
-    verdict('offers Check for updates', (await check.count()) === 1, '');
-    await check.click();
     // The e2e app is a production build run unpackaged: electron-updater skips
-    // every check there, so the real updater path must answer that this build
-    // cannot update itself, not that no update was found.
-    const reacted = await page
+    // every check there. The boot update check's answer says so before any click
+    // (devstation-mg6u.52), so the screen never offers a check that cannot run.
+    const saidAtOnce = await page
       .getByText(/cannot update itself/i)
       .first()
-      .waitFor({ timeout: 30_000 })
-      .then(() => true)
-      .catch(() => false);
+      .isVisible();
+    verdict(
+      'an unpackaged build says it cannot update itself before any click',
+      saidAtOnce && (await page.getByRole('button', { name: /check for updates/i }).count()) === 0,
+      text.replace(/\s+/g, ' ').slice(0, 200)
+    );
+    // Asked again, a new check must run (the button reads Checking while it is in
+    // flight) and end on the same answer, not "no update was found". The note is on
+    // screen before the click, so its presence alone would pass a button that does
+    // nothing: the observer records the in-flight state, however brief.
+    await page.evaluate(() => {
+      const main = document.querySelector('main');
+      window.__sawChecking = false;
+      const seen = () => {
+        if (/checking/i.test(main.innerText)) window.__sawChecking = true;
+      };
+      new MutationObserver(seen).observe(main, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    });
+    await page.getByRole('button', { name: /check again/i }).click();
+    await page.getByRole('button', { name: /check again/i }).waitFor({ timeout: 30_000 });
+    await page
+      .getByText(/cannot update itself/i)
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 });
+    const sawChecking = await page.evaluate(() => window.__sawChecking === true);
     await settle(page);
     await page.screenshot({ path: shot('checked') });
     verdict(
-      'Check for updates in an unpackaged build says it cannot update itself',
-      reacted,
-      (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 200)
+      'Check again runs a new check and still says the build cannot update itself',
+      sawChecking && (await page.getByText(/no update was found/i).count()) === 0,
+      `checking seen: ${sawChecking}; ` +
+        (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 180)
     );
     verdict(
       'after an answer the check is offered again, enabled',

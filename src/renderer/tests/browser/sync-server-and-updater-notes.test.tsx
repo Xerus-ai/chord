@@ -16,12 +16,19 @@ import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import '@renderer/index.css';
 
 let verdict: DesktopCompatibility = { state: 'unknown', checked: false, reason: 'not checked yet' };
+let bootCheck: { success: true; result: null; active: boolean } = {
+  success: true,
+  result: null,
+  active: true,
+};
 
 Object.assign(window, {
   electronAPI: {
     invoke: async (channel: string) => {
       if (channel === 'app.getDesktopCompatibility') return verdict;
       if (channel === 'app.getPublicUrls') return { terms: null, privacy: null };
+      if (channel === 'update.check') return bootCheck;
+      if (channel === 'app.getAppVersion') return '0.1.0';
       throw new Error(`the screen asked the main process for ${channel}`);
     },
     eventOn: () => () => {},
@@ -81,5 +88,24 @@ describe('Settings and a build with no updater', () => {
     const view = render(<UpdateCard />);
     await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
     expect(view.textContent).not.toMatch(/up to date/i);
+  });
+
+  // The boot check is the only word an inactive updater gives (it sends no event).
+  // Dropping its answer left the card idle, and idle reads "You're up to date."
+  it('says so from launch, before anyone checks', async () => {
+    bootCheck = { success: true, result: null, active: false };
+    useUpdateStore.getState().start();
+    const view = render(<UpdateCard />);
+    await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
+    expect(view.textContent).not.toMatch(/up to date/i);
+  });
+
+  it('leaves an active build that found nothing reading up to date', async () => {
+    bootCheck = { success: true, result: null, active: true };
+    useUpdateStore.getState().start();
+    const view = render(<UpdateCard />);
+    await vi.waitFor(() => expect(view.textContent).toMatch(/up to date/i));
+    await settle();
+    expect(view.textContent).not.toContain('cannot update itself');
   });
 });
