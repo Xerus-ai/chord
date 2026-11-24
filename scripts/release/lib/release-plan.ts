@@ -77,8 +77,23 @@ function readLastStableTag(cwd: string): string | null {
   return stable.at(-1) ?? null;
 }
 
-/** The release plan for the repository at `cwd`; throws naming every commit that breaks the rule. */
-export function readReleasePlan(cwd: string): ReleasePlan {
+export type ReleaseChannel = 'stable' | 'canary';
+
+/** The canary tag after every existing canary of `stable`'s version (a tag name is global). */
+function nextCanaryTag(cwd: string, stable: string): string {
+  const taken = git(cwd, ['tag', '--list', `${stable}-canary.*`])
+    .split('\n')
+    .map((tag) => tag.trim())
+    .filter((tag) => RELEASE_TAG.test(tag))
+    .map((tag) => parseReleaseTag(tag).canary ?? 0);
+  return `${stable}-canary.${Math.max(0, ...taken) + 1}`;
+}
+
+/**
+ * The release plan for the repository at `cwd`; throws naming every commit that breaks the rule.
+ * A canary carries the same range as the stable release it precedes, and never moves its base.
+ */
+export function readReleasePlan(cwd: string, channel: ReleaseChannel = 'stable'): ReleasePlan {
   const from = readLastStableTag(cwd);
   // %x1f between sha and message, %x1e after each commit: neither occurs in a commit message.
   const out = git(cwd, [
@@ -103,12 +118,13 @@ export function readReleasePlan(cwd: string): ReleasePlan {
     const lines = breakers.map((commit) => `${commit.sha.slice(0, 12)} ${commit.subject}`);
     throw new Error(`these commits break the commit rule:\n${lines.join('\n')}`);
   }
+  const stable = nextReleaseTag(
+    from,
+    commits.map((commit) => commit.message)
+  );
   return {
     from,
-    tag: nextReleaseTag(
-      from,
-      commits.map((commit) => commit.message)
-    ),
+    tag: channel === 'canary' ? nextCanaryTag(cwd, stable) : stable,
     commits: commits.map(({ sha, subject }) => ({ sha, subject })),
   };
 }
