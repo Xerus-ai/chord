@@ -13,6 +13,9 @@ import { DesktopCompatibilityMonitor, readDesktopCompatibility } from './desktop
  * broken server read as "update required" (which would lock users out of a
  * working app), and a change that never reaches the renderer.
  */
+/** These tests are about one launch: nothing is remembered between them. */
+const noMemory = { load: async () => null, save: async () => {} };
+
 let server: Server;
 let base: string;
 let statusCode = 200;
@@ -23,6 +26,7 @@ function monitorOf(
   intervals = { regular: 60_000, paused: 60_000 }
 ) {
   return new DesktopCompatibilityMonitor({
+    memory: noMemory,
     baseUrl: base,
     currentVersion,
     onChange,
@@ -227,6 +231,7 @@ describe('version handshake', () => {
     const silentBase = `http://127.0.0.1:${(silent.address() as AddressInfo).port}`;
     const changes: DesktopCompatibility[] = [];
     const monitor = new DesktopCompatibilityMonitor({
+      memory: noMemory,
       baseUrl: silentBase,
       currentVersion: async () => '1.0.0',
       onChange: (s) => changes.push(s),
@@ -249,6 +254,7 @@ describe('version handshake', () => {
   it('a started monitor re-checks on the paused interval while turned away', async () => {
     const verdicts: string[] = [];
     const monitor = new DesktopCompatibilityMonitor({
+      memory: noMemory,
       baseUrl: base,
       currentVersion: async () => '1.0.0',
       onChange: () => {},
@@ -256,7 +262,7 @@ describe('version handshake', () => {
       intervals: { regular: 60_000, paused: 100 },
     });
     body = { status: 'ok', min_desktop_version: '2.0.0' };
-    monitor.start();
+    void monitor.start();
     try {
       await vi.waitFor(() => expect(monitor.getState().state).toBe('update_required'), {
         timeout: 2_000,
@@ -289,7 +295,7 @@ describe('version handshake', () => {
     body = { status: 'ok', min_desktop_version: '2.0.0' };
     delays = [3_500, 3_500];
     const started = Date.now();
-    monitor.start();
+    void monitor.start();
     try {
       await vi.waitFor(() => expect(monitor.getState().state).toBe('update_required'), {
         timeout: 12_000,
@@ -306,6 +312,7 @@ describe('version handshake', () => {
   it('a started monitor keeps checking after a listener throws', async () => {
     let calls = 0;
     const monitor = new DesktopCompatibilityMonitor({
+      memory: noMemory,
       baseUrl: base,
       currentVersion: async () => '1.0.0',
       onChange: () => {},
@@ -316,7 +323,7 @@ describe('version handshake', () => {
       intervals: { regular: 100, paused: 100 },
     });
     body = { status: 'ok', min_desktop_version: '0.1.0' };
-    monitor.start();
+    void monitor.start();
     try {
       await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(3), {
         timeout: 2_000,
@@ -336,7 +343,7 @@ describe('version handshake', () => {
       { regular: 60_000, paused: 100 }
     );
     statusCode = 503;
-    monitor.start();
+    void monitor.start();
     try {
       await vi.waitFor(() => expect(monitor.getState()).toMatchObject({ checked: true }), {
         timeout: 2_000,
