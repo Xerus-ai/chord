@@ -85,14 +85,19 @@ function readPreviousTag(cwd: string, sha: string, tag: string): string | null {
   return tags.at(-1) ?? null;
 }
 
-/** The one commit of the range with the release subject; throws unless it touches only the version files. */
-function assertReleaseCommit(cwd: string, range: string, tag: string): void {
+/** The commits of the range with the subject `chore(release): <tag> (<bead>)`, as [sha, subject]. */
+function releaseCommits(cwd: string, range: string, tag: string): string[][] {
   const subject = new RegExp(`^chore\\(release\\): ${tag.replace(/\./g, '\\.')} ${BEAD}$`);
-  const commits = git(cwd, ['log', '--no-merges', '--format=%H%x1f%s', '--end-of-options', range])
+  return git(cwd, ['log', '--no-merges', '--format=%H%x1f%s', '--end-of-options', range])
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => line.split('\x1f'))
     .filter(([, s]) => subject.test(s));
+}
+
+/** The one commit of the range with the release subject; throws unless it touches only the version files. */
+function assertReleaseCommit(cwd: string, range: string, tag: string): void {
+  const commits = releaseCommits(cwd, range, tag);
   if (commits.length === 0) {
     throw new Error(
       `package.json names ${tag}, but ${range} has no commit 'chore(release): ${tag} (<bead>)': ` +
@@ -186,9 +191,15 @@ export async function readReleaseDecision(
   if (tagged !== null && tagged !== head) {
     return { release: false, reason: `${tag} is already tagged at ${tagged.slice(0, 12)}` };
   }
+  const previous = readPreviousTag(cwd, head, tag);
+  const range = previous ? `${previous}..${head}` : head;
   if (tagged === null) {
+    // An untagged version the parent already names is still a release when its release commit
+    // is in range: the release merge's own run can be lost (no push event), so a later commit of
+    // main must cut it. Without one (main before its first release) it is not a release.
     const parent = firstParent(cwd, head);
-    if (parent !== null && readVersion(cwd, parent, 'package.json') === version) {
+    const unchanged = parent !== null && readVersion(cwd, parent, 'package.json') === version;
+    if (unchanged && releaseCommits(cwd, range, tag).length === 0) {
       return {
         release: false,
         reason: `package.json still names ${tag}, untagged: no release PR merged`,
@@ -201,8 +212,6 @@ export async function readReleaseDecision(
     throw new Error(`package.json names ${version} but server/package.json names ${serverVersion}`);
   }
   extractSection(showFile(cwd, head, 'CHANGELOG.md'), tag);
-  const previous = readPreviousTag(cwd, head, tag);
-  const range = previous ? `${previous}..${head}` : head;
   assertReleaseCommit(cwd, range, tag);
   const deployed = await readDeployed();
   if (deployed !== null) assertDeployedIn(cwd, deployed, head);
