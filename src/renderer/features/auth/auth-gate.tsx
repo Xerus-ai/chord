@@ -228,9 +228,14 @@ export function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
                 </p>
               )}
               {serverUnreachable && !error && (
+                // It belongs with the Sign in button, so it enters when the button does.
                 <p
                   role="status"
-                  className="mt-4 max-w-[320px] text-tiny tracking-tiny text-status-warn"
+                  className={cn(
+                    'mt-4 max-w-[320px] text-tiny tracking-tiny text-status-warn',
+                    stage,
+                    ready ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+                  )}
                 >
                   Could not reach the Chord sync server. Sign-in and cloud features may not work
                   until it answers.
