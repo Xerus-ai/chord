@@ -140,11 +140,20 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
       void useUpdateStore.getState().check();
     });
 
-    // Boot-time check is background work nobody asked for: log it, don't put
-    // the Settings card into an error state before the user has looked at it.
-    rpc.update.check().catch((error: unknown) => {
-      log.warn('Startup update check failed:', error);
-    });
+    // Boot-time check is background work nobody asked for: log a failure, don't put
+    // the Settings card into an error state before the user has looked at it. Its
+    // answer is the only word a build with no updater gives (no event follows), so
+    // an inactive one is said at once, unless a check or event already moved on.
+    rpc.update
+      .check()
+      .then((res) => {
+        if (res?.success && !res.active && useUpdateStore.getState().state.status === 'idle') {
+          set({ state: { status: 'unavailable' } });
+        }
+      })
+      .catch((error: unknown) => {
+        log.warn('Startup update check failed:', error);
+      });
   },
 
   check: async () => {
