@@ -1,4 +1,4 @@
-/* global window, document, getComputedStyle -- page.evaluate and waitForFunction callbacks run inside the app window */
+/* global window, document, getComputedStyle, MutationObserver -- page.evaluate and waitForFunction callbacks run inside the app window */
 /**
  * Live check of the version handshake, driven through the
  * real app: the main process reads <CHORD_CLOUD_API_URL>/health and compares
@@ -210,18 +210,36 @@ async function main() {
       saidAtOnce && (await page.getByRole('button', { name: /check for updates/i }).count()) === 0,
       text.replace(/\s+/g, ' ').slice(0, 200)
     );
-    // Asked again, the real updater path answers the same, not "no update was found".
+    // Asked again, a new check must run (the button reads Checking while it is in
+    // flight) and end on the same answer, not "no update was found". The note is on
+    // screen before the click, so its presence alone would pass a button that does
+    // nothing: the observer records the in-flight state, however brief.
+    await page.evaluate(() => {
+      const main = document.querySelector('main');
+      window.__sawChecking = false;
+      const seen = () => {
+        if (/checking/i.test(main.innerText)) window.__sawChecking = true;
+      };
+      new MutationObserver(seen).observe(main, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    });
     await page.getByRole('button', { name: /check again/i }).click();
+    await page.getByRole('button', { name: /check again/i }).waitFor({ timeout: 30_000 });
     await page
       .getByText(/cannot update itself/i)
       .first()
       .waitFor({ state: 'visible', timeout: 30_000 });
+    const sawChecking = await page.evaluate(() => window.__sawChecking === true);
     await settle(page);
     await page.screenshot({ path: shot('checked') });
     verdict(
-      'Check again in an unpackaged build still says it cannot update itself',
-      (await page.getByText(/no update was found/i).count()) === 0,
-      (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 200)
+      'Check again runs a new check and still says the build cannot update itself',
+      sawChecking && (await page.getByText(/no update was found/i).count()) === 0,
+      `checking seen: ${sawChecking}; ` +
+        (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 180)
     );
     verdict(
       'after an answer the check is offered again, enabled',
