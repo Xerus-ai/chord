@@ -1,6 +1,6 @@
 {
   "name": "@chord/sync-server",
-  "version": "0.1.0",
+  "version": "1.0.0-canary.1",
   "description": "Chord cloud sync server — real-time collaboration, presence, and data sync",
   "license": "Apache-2.0",
   "type": "module",
