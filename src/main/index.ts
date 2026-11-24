@@ -1,5 +1,7 @@
 // First: its module-start mark must precede every other module's evaluation.
 import { markBoot, reportBoot } from './app/boot-timing';
+// Before dotenv: a release build's baked addresses (see the module).
+import './app/packaged-env';
 import 'dotenv/config';
 // Must precede every import that reaches esbuild (see the module).
 import './core/artifact-pages/esbuild-binary-path';
