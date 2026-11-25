@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 /**
  * devstation-4x42.57: a low-tier PR merges with no human. The harness posts the change's risk tier
@@ -308,6 +309,30 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
     // devstation-4x42.248: the statuses with their creators, and the App's login trusted.
     expect(text).toContain(`gh api --paginate "repos/$REPO/commits/$SHA/statuses" --jq '.[]'`);
     expect(text).toContain(`--trusted-creator "${TRUSTED}"`);
+  });
+
+  // devstation-mg6u.65: GitHub starts no workflow for a merge credited to GITHUB_TOKEN, so an
+  // auto-merge enabled with github.token left main with no CI run and release.yml never ran
+  // (7493a95, PR #36). The enable call must run with the release App's token.
+  it('auto-merge is enabled with the release App token, so the merge starts workflows', () => {
+    const wf = parse(readFileSync(WORKFLOW, 'utf8'));
+    const steps: Array<{ id?: string; uses?: string; with?: Record<string, string>; env?: Record<string, string>; run?: string }> =
+      wf.jobs.decide.steps;
+    const mint = steps.find((s) => s.uses?.startsWith('actions/create-github-app-token@'));
+    expect(mint, 'a step mints the App token').toBeDefined();
+    expect(mint?.uses).toMatch(/^actions\/create-github-app-token@[0-9a-f]{40}\b/);
+    expect(mint?.with?.['app-id']).toBe('${{ secrets.RELEASE_APP_ID }}');
+    expect(mint?.with?.['private-key']).toBe('${{ secrets.RELEASE_APP_KEY }}');
+    const appToken = `\${{ steps.${mint?.id}.outputs.token }}`;
+    const decide = steps.find((s) => s.run?.includes('--auto --merge'));
+    const run = decide?.run ?? '';
+    const enableLine = run.split('\n').find((l) => l.includes('--auto --merge')) ?? '';
+    // the enable call names the App token itself; the job-level reads keep github.token
+    expect(enableLine).toMatch(/GH_TOKEN="\$APP_TOKEN" gh pr merge/);
+    expect(decide?.env?.APP_TOKEN).toBe(appToken);
+    expect(decide?.env?.GH_TOKEN).toBe('${{ github.token }}');
+    // the workflow's own permissions are not widened for this
+    expect(Object.keys(wf.permissions).sort()).toEqual(['checks', 'contents', 'pull-requests', 'statuses']);
   });
 });
 
