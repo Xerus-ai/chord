@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createReleasedRepo,
+  NO_CI_ASKED,
   RELEASE,
   releaseFiles,
   removeTempRepos,
@@ -33,12 +34,16 @@ describe('readReleaseDecision: the server range starts at the tag the server run
     const { r, head } = failedDeployThenRenderer();
 
     // deployed, not previous, is the migration lint's base: v1.1.0 never went live.
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.0.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.0.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       previous: 'v1.1.0',
       deployed: 'v1.0.0',
       server: true,
     });
-    await expect(readReleaseDecision(r.repo, head, async () => 'v1.1.0')).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v1.1.0', NO_CI_ASKED)
+    ).resolves.toMatchObject({
       server: false,
     });
   });
@@ -46,7 +51,9 @@ describe('readReleaseDecision: the server range starts at the tag the server run
   it('a server that names no release is deployed', async () => {
     const { r, head } = failedDeployThenRenderer();
 
-    await expect(readReleaseDecision(r.repo, head, async () => null)).resolves.toMatchObject({
+    await expect(
+      readReleaseDecision(r.repo, head, async () => null, NO_CI_ASKED)
+    ).resolves.toMatchObject({
       server: true,
     });
   });
@@ -55,11 +62,11 @@ describe('readReleaseDecision: the server range starts at the tag the server run
     const { r, head } = failedDeployThenRenderer();
     r.tag('v9.0.0', r.commit('chore: elsewhere (t-7)', { 'x.txt': 'x\n' }));
 
-    await expect(readReleaseDecision(r.repo, head, async () => 'v9.0.0')).rejects.toThrow(
-      /v9\.0\.0/
-    );
-    await expect(readReleaseDecision(r.repo, head, async () => 'v7.7.7')).rejects.toThrow(
-      /v7\.7\.7/
-    );
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v9.0.0', NO_CI_ASKED)
+    ).rejects.toThrow(/v9\.0\.0/);
+    await expect(
+      readReleaseDecision(r.repo, head, async () => 'v7.7.7', NO_CI_ASKED)
+    ).rejects.toThrow(/v7\.7\.7/);
   });
 });

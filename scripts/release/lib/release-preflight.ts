@@ -66,6 +66,16 @@ function tagCommit(cwd: string, tag: string): string | null {
 const firstParent = (cwd: string, head: string): string | null =>
   git(cwd, ['rev-list', '--parents', '-n', '1', head]).split(' ')[1] ?? null;
 
+/** The first-parent commit of `range` whose own first parent names another version; throws if none. */
+function versionMovedAt(cwd: string, range: string, version: string): string {
+  const chain = git(cwd, ['rev-list', '--first-parent', '--end-of-options', range]).split('\n');
+  for (const commit of chain) {
+    const parent = firstParent(cwd, commit);
+    if (parent === null || readVersion(cwd, parent, 'package.json') !== version) return commit;
+  }
+  throw new Error(`no first-parent commit of ${range} moves package.json to ${version}`);
+}
+
 /** Release tags rank by version; a canary sorts below its stable release. */
 function rank(tag: string): number[] {
   const { major, minor, patch, canary } = parseReleaseTag(tag);
@@ -85,14 +95,19 @@ function readPreviousTag(cwd: string, sha: string, tag: string): string | null {
   return tags.at(-1) ?? null;
 }
 
-/** The one commit of the range with the release subject; throws unless it touches only the version files. */
-function assertReleaseCommit(cwd: string, range: string, tag: string): void {
+/** The commits of the range with the subject `chore(release): <tag> (<bead>)`, as [sha, subject]. */
+function releaseCommits(cwd: string, range: string, tag: string): string[][] {
   const subject = new RegExp(`^chore\\(release\\): ${tag.replace(/\./g, '\\.')} ${BEAD}$`);
-  const commits = git(cwd, ['log', '--no-merges', '--format=%H%x1f%s', '--end-of-options', range])
+  return git(cwd, ['log', '--no-merges', '--format=%H%x1f%s', '--end-of-options', range])
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => line.split('\x1f'))
     .filter(([, s]) => subject.test(s));
+}
+
+/** The one commit of the range with the release subject; throws unless it touches only the version files. */
+function assertReleaseCommit(cwd: string, range: string, tag: string): void {
+  const commits = releaseCommits(cwd, range, tag);
   if (commits.length === 0) {
     throw new Error(
       `package.json names ${tag}, but ${range} has no commit 'chore(release): ${tag} (<bead>)': ` +
@@ -167,11 +182,14 @@ function assertDeployedIn(cwd: string, deployed: string, head: string): void {
  * The decision for `sha`; throws, naming the check, when a release fails one. `readDeployed`
  * asks the live server which release it runs (deployed-tag.ts; null for none) and is called only
  * for a release that passed its checks: a commit that is not a release never needs the server.
+ * `readCiRan` asks GitHub whether CI ran on a commit of main; it is called only for an untagged
+ * version a later commit still names, about the merge that moved it.
  */
 export async function readReleaseDecision(
   cwd: string,
   sha: string,
-  readDeployed: () => Promise<string | null>
+  readDeployed: () => Promise<string | null>,
+  readCiRan: (sha: string) => Promise<boolean>
 ): Promise<ReleaseDecision> {
   // Without history a parent or tag reads as missing, the same as a root commit or no release.
   if (git(cwd, ['rev-parse', '--is-shallow-repository']) === 'true') {
@@ -186,13 +204,28 @@ export async function readReleaseDecision(
   if (tagged !== null && tagged !== head) {
     return { release: false, reason: `${tag} is already tagged at ${tagged.slice(0, 12)}` };
   }
+  const previous = readPreviousTag(cwd, head, tag);
+  const range = previous ? `${previous}..${head}` : head;
   if (tagged === null) {
     const parent = firstParent(cwd, head);
-    if (parent !== null && readVersion(cwd, parent, 'package.json') === version) {
+    const unchanged = parent !== null && readVersion(cwd, parent, 'package.json') === version;
+    if (unchanged && releaseCommits(cwd, range, tag).length === 0) {
       return {
         release: false,
         reason: `package.json still names ${tag}, untagged: no release PR merged`,
       };
+    }
+    // A later commit cuts the release only when the merge that moved the version never got a CI
+    // run (its push event was lost): otherwise that run decides, and a later head would carry a
+    // PR the release's CHANGELOG section does not cover.
+    if (unchanged) {
+      const moved = versionMovedAt(cwd, range, version);
+      if (await readCiRan(moved)) {
+        return {
+          release: false,
+          reason: `${tag} is cut at ${moved.slice(0, 12)}, which has its own CI run`,
+        };
+      }
     }
   }
   parseReleaseTag(tag);
@@ -201,8 +234,6 @@ export async function readReleaseDecision(
     throw new Error(`package.json names ${version} but server/package.json names ${serverVersion}`);
   }
   extractSection(showFile(cwd, head, 'CHANGELOG.md'), tag);
-  const previous = readPreviousTag(cwd, head, tag);
-  const range = previous ? `${previous}..${head}` : head;
   assertReleaseCommit(cwd, range, tag);
   const deployed = await readDeployed();
   if (deployed !== null) assertDeployedIn(cwd, deployed, head);
