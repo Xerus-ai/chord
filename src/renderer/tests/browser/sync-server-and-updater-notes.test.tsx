@@ -21,12 +21,19 @@ let bootCheck: { success: true; result: null; active: boolean } = {
   result: null,
   active: true,
 };
+/** What the updater calls answer, by channel; a function stands for a call that throws. */
+const updaterAnswers: Record<string, unknown> = {};
 
 Object.assign(window, {
   electronAPI: {
     invoke: async (channel: string) => {
       if (channel === 'app.getDesktopCompatibility') return verdict;
       if (channel === 'app.getPublicUrls') return { terms: null, privacy: null };
+      if (channel in updaterAnswers) {
+        const answer = updaterAnswers[channel];
+        if (typeof answer === 'function') throw answer();
+        return answer;
+      }
       if (channel === 'update.check') return bootCheck;
       if (channel === 'app.getAppVersion') return '0.1.0';
       throw new Error(`the screen asked the main process for ${channel}`);
@@ -52,6 +59,7 @@ afterEach(() => {
   host?.remove();
   host = null;
   useUpdateStore.setState({ state: { status: 'idle' } });
+  for (const channel of Object.keys(updaterAnswers)) delete updaterAnswers[channel];
 });
 
 function render(node: React.ReactNode): HTMLElement {
@@ -123,5 +131,42 @@ describe('Settings and a build with no updater', () => {
     await vi.waitFor(() => expect(view.textContent).toMatch(/up to date/i));
     await settle();
     expect(view.textContent).not.toContain('cannot update itself');
+  });
+});
+
+// The answers of the three updater calls become the error the Updates card shows.
+describe('the updater calls report their failures', () => {
+  const actions = [
+    ['check', 'update.check', 'Failed to check for updates'],
+    ['download', 'update.download', 'Failed to download update'],
+    ['install', 'update.quitAndInstall', 'Failed to install update'],
+  ] as const;
+  const errorOf = () => {
+    const { state } = useUpdateStore.getState();
+    return state.status === 'error' ? state.message : `not an error: ${state.status}`;
+  };
+
+  it("a refused call shows the main process's error, and its own fallback without one", async () => {
+    for (const [action, channel, fallback] of actions) {
+      updaterAnswers[channel] = { success: false, error: `${action} refused: disk full` };
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(`${action} refused: disk full`);
+
+      updaterAnswers[channel] = { success: false };
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(fallback);
+    }
+  });
+
+  it("a call answered with nothing says the update API is unavailable; one that throws shows the call's fallback", async () => {
+    for (const [action, channel, fallback] of actions) {
+      updaterAnswers[channel] = null;
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe('Update API unavailable');
+
+      updaterAnswers[channel] = () => new Error('ipc closed');
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(fallback);
+    }
   });
 });
