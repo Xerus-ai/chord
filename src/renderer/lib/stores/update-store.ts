@@ -213,11 +213,6 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
   },
 }));
 
-export function getHasUpdate(): boolean {
-  const { status } = useUpdateStore.getState().state;
-  return status === 'available' || status === 'downloading' || status === 'downloaded';
-}
-
 export function getProgressLabel(): string {
   const state = useUpdateStore.getState().state;
   if (state.status !== 'downloading') return '';
