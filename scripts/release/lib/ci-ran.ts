@@ -15,7 +15,7 @@ export async function readCiRan(
   sha: string,
   timeoutMs = 20_000
 ): Promise<boolean> {
-  const url = `${apiBase}/repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=100`;
+  const url = `${apiBase}/repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=100`;
   let response: Response;
   try {
     response = await fetch(url, {

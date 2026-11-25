@@ -179,6 +179,31 @@ function assertDeployedIn(cwd: string, deployed: string, head: string): void {
 }
 
 /**
+ * Why an untagged `version` at `head` is not a release, or null when it is one. A version the
+ * first parent already names is a release only when its release commit is in `range` and the
+ * merge that moved it never got a CI run (its push event was lost): otherwise that run decides,
+ * and a later head would carry a PR the release's CHANGELOG section does not cover.
+ */
+async function untaggedNotRelease(
+  cwd: string,
+  head: string,
+  range: string,
+  version: string,
+  readCiRan: (sha: string) => Promise<boolean>
+): Promise<string | null> {
+  const tag = `v${version}`;
+  const parent = firstParent(cwd, head);
+  if (parent === null || readVersion(cwd, parent, 'package.json') !== version) return null;
+  if (releaseCommits(cwd, range, tag).length === 0) {
+    return `package.json still names ${tag}, untagged: no release PR merged`;
+  }
+  const moved = versionMovedAt(cwd, range, version);
+  if (await readCiRan(moved))
+    return `${tag} is cut at ${moved.slice(0, 12)}, which has its own CI run`;
+  return null;
+}
+
+/**
  * The decision for `sha`; throws, naming the check, when a release fails one. `readDeployed`
  * asks the live server which release it runs (deployed-tag.ts; null for none) and is called only
  * for a release that passed its checks: a commit that is not a release never needs the server.
@@ -207,26 +232,8 @@ export async function readReleaseDecision(
   const previous = readPreviousTag(cwd, head, tag);
   const range = previous ? `${previous}..${head}` : head;
   if (tagged === null) {
-    const parent = firstParent(cwd, head);
-    const unchanged = parent !== null && readVersion(cwd, parent, 'package.json') === version;
-    if (unchanged && releaseCommits(cwd, range, tag).length === 0) {
-      return {
-        release: false,
-        reason: `package.json still names ${tag}, untagged: no release PR merged`,
-      };
-    }
-    // A later commit cuts the release only when the merge that moved the version never got a CI
-    // run (its push event was lost): otherwise that run decides, and a later head would carry a
-    // PR the release's CHANGELOG section does not cover.
-    if (unchanged) {
-      const moved = versionMovedAt(cwd, range, version);
-      if (await readCiRan(moved)) {
-        return {
-          release: false,
-          reason: `${tag} is cut at ${moved.slice(0, 12)}, which has its own CI run`,
-        };
-      }
-    }
+    const reason = await untaggedNotRelease(cwd, head, range, version, readCiRan);
+    if (reason !== null) return { release: false, reason };
   }
   parseReleaseTag(tag);
   const serverVersion = readVersion(cwd, head, 'server/package.json');
