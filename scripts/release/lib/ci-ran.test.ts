@@ -18,12 +18,19 @@ afterEach(async () => {
 const SHA = '7364c16aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const seen: { url?: string; headers?: IncomingHttpHeaders } = {};
 
+/** Answers `body`; like GitHub, an `event` query keeps only the runs of that event. */
 function serve(status: number, body: unknown): Promise<string> {
   server = createServer((req, res) => {
     seen.url = req.url;
     seen.headers = req.headers;
+    const event = new URLSearchParams(req.url?.split('?')[1]).get('event');
+    let answer = body;
+    if (event && body && typeof body === 'object' && 'workflow_runs' in body) {
+      const kept = (body.workflow_runs as { event?: string }[]).filter((r) => r.event === event);
+      answer = { total_count: kept.length, workflow_runs: kept };
+    }
     res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(body));
+    res.end(JSON.stringify(answer));
   });
   return new Promise((resolve) => {
     server!.listen(0, '127.0.0.1', () => {
@@ -32,9 +39,9 @@ function serve(status: number, body: unknown): Promise<string> {
   });
 }
 
-const runs = (...list: { status: string; conclusion: string | null }[]) => ({
+const runs = (...list: { status: string; conclusion: string | null; event?: string }[]) => ({
   total_count: list.length,
-  workflow_runs: list,
+  workflow_runs: list.map((run) => ({ event: 'push', ...run })),
 });
 
 describe('readCiRan', () => {
@@ -75,6 +82,16 @@ describe('readCiRan', () => {
       )
     );
     await expect(readCiRan(cancelled, 'o/r', 't', SHA)).resolves.toBe(false);
+  });
+
+  // A PR head's own CI runs under pull_request; only the push run on main tests the merge.
+  it('a commit whose only CI run came from a pull_request event never ran on main', async () => {
+    const api = await serve(
+      200,
+      runs({ status: 'completed', conclusion: 'success', event: 'pull_request' })
+    );
+
+    await expect(readCiRan(api, 'o/r', 't', SHA)).resolves.toBe(false);
   });
 
   it('refuses an answer other than 200, naming the status', async () => {
