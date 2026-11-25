@@ -10,7 +10,7 @@ import { probeRelease, readReleaseManifests } from './lib/probe.ts';
  * completes on. The manifests are the tag's channel on every platform: v<major>-stable or
  * v<major>-canary, plus -mac and -linux. Exit 0 when every check passes.
  *
- *   node scripts/release/probe.ts --tag vX.Y.Z --out <harness>/.command-center/proofs/release-vX.Y.Z/probe.json [--base <url>]
+ *   node scripts/release/probe.ts --tag vX.Y.Z --out <harness>/.command-center/proofs/<bead>/checks/probe.json [--base <url>]
  */
 const { values } = parseArgs({
   options: {

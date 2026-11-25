@@ -8,7 +8,7 @@ import { parseReleaseTag } from './release-plan.ts';
  * The post-release probe (devstation-g98j, C3, F14): what a user's updater would fetch after a
  * release, checked against its tag. Each manifest must be served, must name the tag's version,
  * and every file it lists must be served with the sha512 it states. The receipt is what the
- * release gate's complete reads (`proofs/release-<tag>/probe.json`).
+ * release gate's complete reads (`proofs/<bead>/checks/probe.json`, the release bead's).
  */
 
 export interface ProbeCheck {
