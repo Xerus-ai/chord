@@ -66,6 +66,10 @@ const deployDbSuites = ['scripts/release/deploy-migrate.test.ts'];
 
 export default defineConfig({
   resolve: { alias },
+  // No .env file reaches a test: a writer has the app's .env and CI has none, so a test that
+  // leaned on one passed locally and failed CI. Values tests need are pinned below, the same
+  // everywhere (devstation-mg6u.60).
+  envDir: false,
   test: {
     // Vitest sizes the pool by CPU (19 workers on this 20-thread, 16 GB box),
     // not by memory. On 2026-10-16 the node project alone, under the same
