@@ -1,16 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { resolveConfig } from 'vite';
+import { afterEach, describe, expect, it } from 'vitest';
 
 /**
- * Tests read no `.env` file (devstation-mg6u.60). Vite loads `.env` from the app root into
- * `import.meta.env` by default; a writer has the main app's `.env` copied in and CI has none, so
- * a test that leaned on one passed gate verify and failed CI (PR #32). Values a test needs are
- * pinned in vitest.config.ts, the same everywhere. This fails in any tree whose `.env` sets a
- * VITE_ variable while the config still loads it.
+ * The test config reads no `.env` file (devstation-mg6u.60). Vite loads the VITE_ variables of a
+ * `.env` in its env folder, and vitest copies them onto process.env for every test. A writer has
+ * the main app's `.env` copied in and CI has none, so a test that leaned on one passed gate verify
+ * and failed CI (PR #32). Values tests need are pinned in vitest.config.ts instead.
  */
-describe('vitest environment', () => {
-  it('holds no VITE_ variable from a .env file in the app root', () => {
-    const fromEnvFile = Object.keys(import.meta.env).filter((key) => key.startsWith('VITE_'));
+let dir: string | null = null;
+afterEach(() => {
+  if (dir) rmSync(dir, { recursive: true, force: true });
+  dir = null;
+});
 
-    expect(fromEnvFile).toEqual([]);
+describe('vitest.config.ts', () => {
+  it('loads no VITE_ variable from a .env file, so a tree with one runs like CI', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'vitest-env-'));
+    writeFileSync(join(dir, '.env'), 'VITE_PROBE_FROM_ENV_FILE=leaked\n');
+
+    const config = await resolveConfig(
+      { configFile: resolve(__dirname, '..', 'vitest.config.ts'), root: dir, logLevel: 'silent' },
+      'serve',
+      'test'
+    );
+
+    expect(config.env.VITE_PROBE_FROM_ENV_FILE).toBeUndefined();
   });
 });
