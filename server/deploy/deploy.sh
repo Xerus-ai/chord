@@ -11,6 +11,10 @@
 #
 #   git archive --format=tar <tag> | ssh deploy@<host> deploy <tag> <sha>
 #
+# or exactly `version`, which prints the sha256 of this script and touches
+# nothing: release readiness compares it with main's deploy.sh, because the box
+# only installs a new one when bootstrap.sh runs again (devstation-mg6u.74).
+#
 # The key gets no shell, but it deploys code: the release's build runs as
 # deploy and the server runs it as chord, with the production .env. Treat the
 # key as the right to ship code to production.
@@ -38,6 +42,11 @@ set -Eeuo pipefail
 umask 022
 
 request=${SSH_ORIGINAL_COMMAND-"$*"}
+if [[ $request == version ]]; then
+  # from stdin: with a path, sha256sum escapes a backslash in it and prefixes the line with '\'
+  sha256sum <"${BASH_SOURCE[0]}" | cut -d' ' -f1
+  exit 0
+fi
 re='^deploy (v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?) ([0-9a-f]{40})$'
 if [[ ! $request =~ $re ]]; then
   echo "deploy.sh: refused; the only request is: deploy <vX.Y.Z[-pre]> <40-hex commit>" >&2

@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -165,6 +166,20 @@ describe('deploy.sh', () => {
       expect(res.code, `request ${JSON.stringify(request)}: ${res.out}`).toBe(2);
     }
     // Refused before anything on the box changed.
+    expect(readdirSync(root)).toEqual([]);
+  });
+
+  // devstation-mg6u.74: release readiness compares the box's deploy.sh with main's through the
+  // deploy key, which gets no shell, so the script itself answers with its own hash.
+  it('deploy.sh answers version with its own sha256 and touches nothing', async () => {
+    const { root, run } = await box();
+    const want = createHash('sha256').update(readFileSync(DEPLOY_SH)).digest('hex');
+    const res = run('version');
+    expect(res.code, res.out).toBe(0);
+    expect(res.out.trim()).toBe(want);
+    for (const request of ['version x', 'version;id', ' version', 'version\nid']) {
+      expect(run(request).code, `request ${JSON.stringify(request)}`).toBe(2);
+    }
     expect(readdirSync(root)).toEqual([]);
   });
 
