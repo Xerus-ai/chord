@@ -39,7 +39,7 @@ try {
       return deployed;
     },
     async (merge) => {
-      const ran = await readCiRan(repo, token, merge);
+      const ran = await readCiRan('https://api.github.com', repo, token, merge);
       info(`CI ${ran ? 'ran' : 'never ran'} on ${merge}`);
       return ran;
     }

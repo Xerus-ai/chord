@@ -1,16 +1,21 @@
+/** A run that never tested the commit: ci.yml cancels a main run when another merge lands. */
+const NO_RUN = new Set(['cancelled', 'skipped']);
+
 /**
- * Whether the CI workflow (`.github/workflows/ci.yml`) has any run, in any state, for `sha` in
- * `repo` (owner/name), from GitHub's Actions API with `token`. A release merge whose push event
- * GitHub lost has none. Throws when GitHub cannot be read or answers other than 200: the release
- * decision needs a reading.
+ * Whether the CI workflow (`.github/workflows/ci.yml`) ran on `sha` in `repo` (owner/name), from
+ * GitHub's Actions API at `apiBase` with `token`: a queued, running, passed or failed run counts;
+ * a cancelled or skipped one does not, nor does none at all (a release merge whose push event
+ * GitHub lost). Throws when the API cannot be read, answers other than 200, or sends no
+ * workflow_runs: the release decision needs a reading.
  */
 export async function readCiRan(
+  apiBase: string,
   repo: string,
   token: string,
   sha: string,
   timeoutMs = 20_000
 ): Promise<boolean> {
-  const url = `https://api.github.com/repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=1`;
+  const url = `${apiBase}/repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=100`;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -24,9 +29,11 @@ export async function readCiRan(
   if (response.status !== 200) {
     throw new Error(`GitHub answered ${response.status} for the CI runs of ${sha}`);
   }
-  const body = (await response.json()) as { total_count?: unknown };
-  if (typeof body.total_count !== 'number') {
-    throw new Error(`GitHub sent no total_count for the CI runs of ${sha}`);
+  const body = (await response.json()) as { workflow_runs?: unknown };
+  if (!Array.isArray(body.workflow_runs)) {
+    throw new Error(`GitHub sent no workflow_runs for the CI runs of ${sha}`);
   }
-  return body.total_count > 0;
+  return (body.workflow_runs as { conclusion?: string | null }[]).some(
+    (run) => !NO_RUN.has(run.conclusion ?? '')
+  );
 }
