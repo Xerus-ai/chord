@@ -8,12 +8,10 @@
  * Only the preload bridge is supplied: invoke answers the version verdict and
  * the public URLs the sign-in screen reads.
  */
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { flushSync } from 'react-dom';
-import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import '@renderer/index.css';
+import { mount as render, unmountAll } from './mount';
 
 let verdict: DesktopCompatibility = { state: 'unknown', checked: false, reason: 'not checked yet' };
 let bootCheck: { success: true; result: null; active: boolean } = {
@@ -21,12 +19,19 @@ let bootCheck: { success: true; result: null; active: boolean } = {
   result: null,
   active: true,
 };
+/** What the updater calls answer, by channel; a function stands for a call that throws. */
+const updaterAnswers: Record<string, unknown> = {};
 
 Object.assign(window, {
   electronAPI: {
     invoke: async (channel: string) => {
       if (channel === 'app.getDesktopCompatibility') return verdict;
       if (channel === 'app.getPublicUrls') return { terms: null, privacy: null };
+      if (channel in updaterAnswers) {
+        const answer = updaterAnswers[channel];
+        if (typeof answer === 'function') throw answer();
+        return answer;
+      }
       if (channel === 'update.check') return bootCheck;
       if (channel === 'app.getAppVersion') return '0.1.0';
       throw new Error(`the screen asked the main process for ${channel}`);
@@ -43,25 +48,11 @@ const { AuthGate } = await import('@renderer/features/auth/auth-gate');
 const { UpdateCard } = await import('@renderer/features/settings/components/UpdateCard');
 const { useUpdateStore } = await import('@renderer/lib/stores/update-store');
 
-let root: Root | null = null;
-let host: HTMLDivElement | null = null;
-
 afterEach(() => {
-  root?.unmount();
-  root = null;
-  host?.remove();
-  host = null;
+  unmountAll();
   useUpdateStore.setState({ state: { status: 'idle' } });
+  for (const channel of Object.keys(updaterAnswers)) delete updaterAnswers[channel];
 });
-
-function render(node: React.ReactNode): HTMLElement {
-  host = document.createElement('div');
-  document.body.appendChild(host);
-  root = createRoot(host);
-  const client = new QueryClient();
-  flushSync(() => root!.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
-  return host;
-}
 
 const NOTE = /could not reach the chord sync server/i;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -82,12 +73,17 @@ describe('sign-in and the sync server', () => {
   });
 });
 
+/** The Updates card says the build cannot update itself, never that it is up to date. */
+async function expectCannotUpdate(view: HTMLElement): Promise<void> {
+  await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
+  expect(view.textContent).not.toMatch(/up to date/i);
+}
+
 describe('Settings and a build with no updater', () => {
   it('says the build cannot update itself, not that it is up to date', async () => {
     useUpdateStore.setState({ state: { status: 'unavailable' } });
     const view = render(<UpdateCard />);
-    await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
-    expect(view.textContent).not.toMatch(/up to date/i);
+    await expectCannotUpdate(view);
   });
 
   // A re-check on such a build only repeats the same note: the card offers none.
@@ -97,8 +93,7 @@ describe('Settings and a build with no updater', () => {
     useUpdateStore.setState({ state: { status: 'idle' } });
     const idle = render(<UpdateCard />);
     await vi.waitFor(() => expect(checkButton(idle)).not.toBeNull());
-    root?.unmount();
-    host?.remove();
+    unmountAll();
 
     useUpdateStore.setState({ state: { status: 'unavailable' } });
     const view = render(<UpdateCard />);
@@ -112,8 +107,7 @@ describe('Settings and a build with no updater', () => {
     bootCheck = { success: true, result: null, active: false };
     useUpdateStore.getState().start();
     const view = render(<UpdateCard />);
-    await vi.waitFor(() => expect(view.textContent).toContain('cannot update itself'));
-    expect(view.textContent).not.toMatch(/up to date/i);
+    await expectCannotUpdate(view);
   });
 
   it('leaves an active build that found nothing reading up to date', async () => {
@@ -123,5 +117,42 @@ describe('Settings and a build with no updater', () => {
     await vi.waitFor(() => expect(view.textContent).toMatch(/up to date/i));
     await settle();
     expect(view.textContent).not.toContain('cannot update itself');
+  });
+});
+
+// The answers of the three updater calls become the error the Updates card shows.
+describe('the updater calls report their failures', () => {
+  const actions = [
+    ['check', 'update.check', 'Failed to check for updates'],
+    ['download', 'update.download', 'Failed to download update'],
+    ['install', 'update.quitAndInstall', 'Failed to install update'],
+  ] as const;
+  const errorOf = () => {
+    const { state } = useUpdateStore.getState();
+    return state.status === 'error' ? state.message : `not an error: ${state.status}`;
+  };
+
+  it("a refused call shows the main process's error, and its own fallback without one", async () => {
+    for (const [action, channel, fallback] of actions) {
+      updaterAnswers[channel] = { success: false, error: `${action} refused: disk full` };
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(`${action} refused: disk full`);
+
+      updaterAnswers[channel] = { success: false };
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(fallback);
+    }
+  });
+
+  it("a call answered with nothing says the update API is unavailable; one that throws shows the call's fallback", async () => {
+    for (const [action, channel, fallback] of actions) {
+      updaterAnswers[channel] = null;
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe('Update API unavailable');
+
+      updaterAnswers[channel] = () => new Error('ipc closed');
+      await useUpdateStore.getState()[action]();
+      expect(errorOf()).toBe(fallback);
+    }
   });
 });

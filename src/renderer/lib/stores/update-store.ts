@@ -78,6 +78,15 @@ function maybeToastAvailable(version: string): void {
   rememberNotified(version);
 }
 
+/** The error an updater call's answer reports, or null when it succeeded. */
+function callError(
+  res: { success: boolean; error?: string } | null | undefined,
+  fallback: string
+): string | null {
+  if (!res) return 'Update API unavailable';
+  return res.success ? null : (res.error ?? fallback);
+}
+
 export const useUpdateStore = create<UpdateStoreState>()((set) => ({
   state: { status: 'idle' } as UpdateState,
   currentVersion: '',
@@ -160,13 +169,10 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
     set({ state: { status: 'checking' } });
     try {
       const res = await rpc.update.check();
-      if (!res) {
-        set({ state: { status: 'error', message: 'Update API unavailable' } });
-        return;
-      }
-      if (!res.success) {
-        set({ state: { status: 'error', message: res.error ?? 'Failed to check for updates' } });
-      } else if (!res.active) {
+      const error = callError(res, 'Failed to check for updates');
+      if (error !== null) {
+        set({ state: { status: 'error', message: error } });
+      } else if (!res?.active) {
         // No updater in this build: it sends no event, so the answer is the only word.
         set({ state: { status: 'unavailable' } });
       } else if (res.result === null) {
@@ -181,14 +187,8 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
 
   download: async () => {
     try {
-      const res = await rpc.update.download();
-      if (!res) {
-        set({ state: { status: 'error', message: 'Update API unavailable' } });
-        return;
-      }
-      if (!res.success) {
-        set({ state: { status: 'error', message: res.error ?? 'Failed to download update' } });
-      }
+      const error = callError(await rpc.update.download(), 'Failed to download update');
+      if (error !== null) set({ state: { status: 'error', message: error } });
     } catch {
       set({ state: { status: 'error', message: 'Failed to download update' } });
     }
@@ -197,14 +197,8 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
   install: async () => {
     set({ state: { status: 'installing' } });
     try {
-      const res = await rpc.update.quitAndInstall();
-      if (!res) {
-        set({ state: { status: 'error', message: 'Update API unavailable' } });
-        return;
-      }
-      if (!res.success) {
-        set({ state: { status: 'error', message: res.error ?? 'Failed to install update' } });
-      }
+      const error = callError(await rpc.update.quitAndInstall(), 'Failed to install update');
+      if (error !== null) set({ state: { status: 'error', message: error } });
     } catch {
       set({ state: { status: 'error', message: 'Failed to install update' } });
     }
@@ -218,11 +212,6 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
     }
   },
 }));
-
-export function getHasUpdate(): boolean {
-  const { status } = useUpdateStore.getState().state;
-  return status === 'available' || status === 'downloading' || status === 'downloaded';
-}
 
 export function getProgressLabel(): string {
   const state = useUpdateStore.getState().state;
