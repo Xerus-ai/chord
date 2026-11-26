@@ -1,8 +1,7 @@
-import type { FeatureFlag } from '@chord/protocol';
+import type { FeatureFlag, FeatureFlags } from '@chord/protocol';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { featureFlagsChangedChannel } from '@shared/events/appEvents';
-import type { FeatureFlags } from '@shared/feature-flags';
 import { events, rpc } from '@renderer/lib/ipc';
 
 const KEY = ['app', 'feature-flags'] as const;

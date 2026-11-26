@@ -1,6 +1,7 @@
-import { resolveFeatureFlags, type ServerHealth } from '@chord/protocol';
-import type { FeatureFlags } from '@shared/feature-flags';
+import { resolveFeatureFlags, type FeatureFlags, type ServerHealth } from '@chord/protocol';
+import { featureFlagsChangedChannel } from '@shared/events/appEvents';
 import { appSettingsService } from '@main/core/settings/settings-service';
+import { events } from '@main/lib/events';
 
 /**
  * Feature flags in main (devstation-mg6u.90): the sync server's /health names which flags are on
@@ -61,3 +62,9 @@ export class FeatureFlagsStore {
     this.options.onChange(next);
   }
 }
+
+/** The app's flags: restored before the handshake starts, fed by each /health reading. */
+export const featureFlagsStore = new FeatureFlagsStore({
+  memory: settingsFlagsMemory,
+  onChange: (flags) => events.emit(featureFlagsChangedChannel, flags),
+});

@@ -1,6 +1,6 @@
+import type { FeatureFlags } from '@chord/protocol';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import type { DesktopCompatibility } from '@shared/desktop-compatibility';
-import type { FeatureFlags } from '@shared/feature-flags';
 import { defineEvent } from '@shared/ipc/events';
 
 // App editing actions (renderer → main, no payload)

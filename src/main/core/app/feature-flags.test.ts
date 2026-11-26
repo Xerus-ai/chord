@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { FeatureFlags } from '@chord/protocol';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FeatureFlags } from '@shared/feature-flags';
 import type { VerdictMemory } from './desktop-compatibility';
 
 /**
