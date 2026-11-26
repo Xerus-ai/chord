@@ -328,6 +328,13 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
     expect(mint?.uses).toMatch(/^actions\/create-github-app-token@[0-9a-f]{40}\b/);
     expect(mint?.with?.['app-id']).toBe('${{ secrets.RELEASE_APP_ID }}');
     expect(mint?.with?.['private-key']).toBe('${{ secrets.RELEASE_APP_KEY }}');
+    // verifier round 1: the token is scoped to what enabling auto-merge needs, not every App permission
+    expect(mint?.with?.['permission-contents']).toBe('write');
+    expect(mint?.with?.['permission-pull-requests']).toBe('write');
+    expect(Object.keys(mint?.with ?? {}).filter((k) => k.startsWith('permission-')).sort()).toEqual([
+      'permission-contents',
+      'permission-pull-requests',
+    ]);
     const appToken = `\${{ steps.${mint?.id}.outputs.token }}`;
     const decide = steps.find((s) => s.run?.includes('--auto --merge'));
     const run = decide?.run ?? '';

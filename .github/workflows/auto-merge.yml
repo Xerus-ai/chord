@@ -61,6 +61,9 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_KEY }}
+          # only what enabling auto-merge needs: this App is also the v* tag ruleset's bypass
+          permission-contents: write
+          permission-pull-requests: write
       # The default branch: the script and the tier list that decide are main's, never a PR's.
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
