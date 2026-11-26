@@ -53,6 +53,17 @@ jobs:
     concurrency:
       group: auto-merge-${{ github.event.sha || github.event.workflow_run.head_sha }}
     steps:
+      # devstation-mg6u.65: GitHub starts no workflow for a merge credited to GITHUB_TOKEN, so the
+      # enable call uses the release App's token; the merge then starts CI on main, and release.yml.
+      - name: The release app's token (auto-merge credited to the App starts workflows)
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          # only what enabling auto-merge needs: this App is also the v* tag ruleset's bypass
+          permission-contents: write
+          permission-pull-requests: write
       # The default branch: the script and the tier list that decide are main's, never a PR's.
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,6 +72,7 @@ jobs:
       - name: Decide each open PR whose head is this commit
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.sha || github.event.workflow_run.head_sha }}
         run: |
@@ -82,6 +94,6 @@ jobs:
               --ignore-check "auto-merge hold" --ignore-check "auto-merge decide")
             echo "PR #$pr: $decision"
             action=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).action)' "$decision")
-            if [ "$action" = enable ]; then gh pr merge "$pr" -R "$REPO" --auto --merge --match-head-commit "$SHA"; fi
+            if [ "$action" = enable ]; then GH_TOKEN="$APP_TOKEN" gh pr merge "$pr" -R "$REPO" --auto --merge --match-head-commit "$SHA"; fi
             if [ "$action" = disable ]; then gh pr merge "$pr" -R "$REPO" --disable-auto; fi
           done
