@@ -106,4 +106,38 @@ describe('probeRelease', () => {
     const failed = receipt.checks.filter((c) => !c.ok).map((c) => c.name);
     expect(failed).toEqual(['v1-stable.yml version', 'v1-stable-mac.yml fetch']);
   });
+
+  // devstation-nfna (C8, F15): users download from the site, whose dialog reads the manifest the
+  // site serves at /releases/<manifest>. The probe waits for it to name the tag; the site may lag.
+  it('the site check waits for the site to serve the tag', async () => {
+    const files: Record<string, string | Buffer> = {
+      'v1-stable.yml': manifest('1.0.0', sha512(INSTALLER)),
+      'chord-1.0.0-x64.exe': INSTALLER,
+      'releases/v1-stable.yml': manifest('0.9.0', sha512(INSTALLER)),
+    };
+    const baseUrl = await serve(files);
+    // the site's copy catches up after a moment
+    setTimeout(() => (files['releases/v1-stable.yml'] = manifest('1.0.0', sha512(INSTALLER))), 150);
+
+    const caughtUp = await probeRelease({
+      tag: 'v1.0.0',
+      baseUrl,
+      manifests: ['v1-stable.yml'],
+      site: { url: baseUrl, waitMs: 3000, intervalMs: 50 },
+    });
+    expect(caughtUp.checks.find((c) => c.name === 'site v1-stable.yml version')?.ok).toBe(true);
+    expect(caughtUp.ok).toBe(true);
+
+    files['releases/v1-stable.yml'] = manifest('0.9.0', sha512(INSTALLER));
+    const stale = await probeRelease({
+      tag: 'v1.0.0',
+      baseUrl,
+      manifests: ['v1-stable.yml'],
+      site: { url: baseUrl, waitMs: 300, intervalMs: 50 },
+    });
+    const site = stale.checks.find((c) => c.name === 'site v1-stable.yml version');
+    expect(site?.ok).toBe(false);
+    expect(site?.detail).toContain('0.9.0');
+    expect(stale.ok).toBe(false);
+  });
 });
