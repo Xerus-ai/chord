@@ -316,8 +316,13 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
   // (7493a95, PR #36). The enable call must run with the release App's token.
   it('auto-merge is enabled with the release App token, so the merge starts workflows', () => {
     const wf = parse(readFileSync(WORKFLOW, 'utf8'));
-    const steps: Array<{ id?: string; uses?: string; with?: Record<string, string>; env?: Record<string, string>; run?: string }> =
-      wf.jobs.decide.steps;
+    const steps: Array<{
+      id?: string;
+      uses?: string;
+      with?: Record<string, string>;
+      env?: Record<string, string>;
+      run?: string;
+    }> = wf.jobs.decide.steps;
     const mint = steps.find((s) => s.uses?.startsWith('actions/create-github-app-token@'));
     expect(mint, 'a step mints the App token').toBeDefined();
     expect(mint?.uses).toMatch(/^actions\/create-github-app-token@[0-9a-f]{40}\b/);
@@ -332,7 +337,12 @@ describe('auto-merge of a low-tier PR (devstation-4x42.57)', () => {
     expect(decide?.env?.APP_TOKEN).toBe(appToken);
     expect(decide?.env?.GH_TOKEN).toBe('${{ github.token }}');
     // the workflow's own permissions are not widened for this
-    expect(Object.keys(wf.permissions).sort()).toEqual(['checks', 'contents', 'pull-requests', 'statuses']);
+    expect(Object.keys(wf.permissions).sort()).toEqual([
+      'checks',
+      'contents',
+      'pull-requests',
+      'statuses',
+    ]);
   });
 });
 
