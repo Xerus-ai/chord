@@ -20,7 +20,7 @@ export function PreviewFeaturesCard(): React.JSX.Element {
               title={FEATURE_FLAGS[flag].title}
               description="Turned on by the Chord server while the feature is in preview."
               control={
-                <Badge variant={on ? 'default' : 'secondary'} className="h-5 px-2 text-tiny">
+                <Badge variant={on ? 'outline' : 'secondary'} className="h-5 px-2 text-tiny">
                   {on ? 'On' : 'Off'}
                 </Badge>
               }

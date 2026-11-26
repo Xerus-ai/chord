@@ -110,6 +110,8 @@ async function readWhatsNew(page, name) {
   await card.scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   await page.screenshot({ path: shot(name) });
+  // The card alone: the full window shows the seed account, which a public PR must not.
+  await card.screenshot({ path: shot(`${name}-card`) });
   const row = card.getByTestId('feature-flag-whats_new');
   return {
     title: await row.getByText("What's new").count(),
