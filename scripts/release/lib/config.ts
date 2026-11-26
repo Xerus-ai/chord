@@ -8,6 +8,8 @@ export {
 } from '../../../src/shared/app-identity.ts';
 
 export const RELEASE_DIR = 'release';
+// The site users download from (chord-landing); its dialog reads <SITE_URL>/releases/<manifest>.
+export const SITE_URL = process.env.CHORD_SITE_URL || 'https://chord.xerus.ai';
 // better-sqlite3 13 is N-API and ships a prebuild per platform, so it is not rebuilt per arch.
 export const NATIVE_MODULES = ['node-pty', '@parcel/watcher'];
 
