@@ -2,6 +2,14 @@ import { FEATURE_FLAGS, resolveFeatureFlags } from '@chord/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { enabledFeatureFlags } from './feature-flags';
 
+// The app is imported once, before any test (as health.test.ts does): importing it inside a test
+// ran past the 5 s test timeout under the full run. No database for this app.
+vi.stubEnv('DATABASE_URL', '');
+vi.stubEnv('DEV_MODE', '');
+vi.stubEnv('WORKOS_CLIENT_ID', 'client_flags_test');
+const { createApp } = await import('./server');
+const { ConnectionManager } = await import('./ws/connection-manager');
+
 /**
  * Feature flags (devstation-mg6u.90): the server names which registered flags are on, from the
  * optional CHORD_FEATURE_FLAGS. The bugs these catch: a typo on the box that silently turns
@@ -39,14 +47,12 @@ describe('enabledFeatureFlags', () => {
     expect(() => enabledFeatureFlags('whats_new,whats_neww')).toThrow(/whats_neww/);
   });
 
-  it('the server does not start with an unknown flag in CHORD_FEATURE_FLAGS', async () => {
-    vi.stubEnv('DATABASE_URL', '');
-    vi.stubEnv('DEV_MODE', '');
-    vi.stubEnv('WORKOS_CLIENT_ID', 'client_flags_test');
-    const { createApp } = await import('./server');
-    const { ConnectionManager } = await import('./ws/connection-manager');
+  it('the server does not start with an unknown flag in CHORD_FEATURE_FLAGS', () => {
     vi.stubEnv('CHORD_FEATURE_FLAGS', 'whats_neww');
-    expect(() => createApp(new ConnectionManager())).toThrow(/CHORD_FEATURE_FLAGS.*whats_neww/);
-    vi.unstubAllEnvs();
+    try {
+      expect(() => createApp(new ConnectionManager())).toThrow(/CHORD_FEATURE_FLAGS.*whats_neww/);
+    } finally {
+      vi.stubEnv('CHORD_FEATURE_FLAGS', '');
+    }
   });
 });

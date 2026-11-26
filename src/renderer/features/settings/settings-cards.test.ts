@@ -187,11 +187,12 @@ describe('settings card placement (settings redesign, devstation-tuz6)', () => {
     expect(general).not.toContain('worktree-sources');
   });
 
-  it('leaves General with account, privacy and updates only', () => {
+  it('leaves General with account, privacy, updates and preview features only', () => {
     expect(settingsCardsForTab('general').map((card) => card.id)).toEqual([
       'account',
       'telemetry',
       'updates',
+      'preview-features',
     ]);
   });
 
