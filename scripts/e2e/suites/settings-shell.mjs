@@ -73,8 +73,8 @@ async function checkShell(page) {
     .locator('[id^="settings-card-"]')
     .evaluateAll((nodes) => nodes.map((node) => node.id.replace('settings-card-', '')));
   verdict(
-    'General holds account, privacy and updates only',
-    generalCards.join(',') === 'account,telemetry,updates',
+    'General holds account, privacy, updates and preview features only',
+    generalCards.join(',') === 'account,telemetry,updates,preview-features',
     generalCards.join(',')
   );
 

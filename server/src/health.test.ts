@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { compareVersions, MIN_DESKTOP_VERSION, ServerHealthSchema } from '@chord/protocol';
+import {
+  compareVersions,
+  FEATURE_FLAGS,
+  MIN_DESKTOP_VERSION,
+  ServerHealthSchema,
+} from '@chord/protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -15,6 +20,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.stubEnv('DATABASE_URL', '');
 vi.stubEnv('DEV_MODE', '');
 vi.stubEnv('WORKOS_CLIENT_ID', 'client_health_test');
+// No flag on unless a test turns one on (devstation-mg6u.90).
+vi.stubEnv('CHORD_FEATURE_FLAGS', '');
 const { createApp } = await import('./server');
 const { ConnectionManager } = await import('./ws/connection-manager');
 
@@ -72,5 +79,30 @@ describe('/health', () => {
     const undeployed = ServerHealthSchema.parse(await (await fetch(`${base}/health`)).json());
     expect(undeployed.version).toBeNull();
     expect(undeployed.commit).toBeNull();
+  });
+
+  /**
+   * devstation-mg6u.90: the app reads its feature flags from /health. The bugs: a server that
+   * leaves a registered flag out (the app cannot tell off from unknown), or turns on one the box
+   * did not list.
+   */
+  it('health serves every registered flag, on exactly for the names in CHORD_FEATURE_FLAGS', async () => {
+    const registered = Object.keys(FEATURE_FLAGS).sort();
+    const none = ServerHealthSchema.parse(await (await fetch(`${base}/health`)).json());
+    expect(Object.keys(none.flags ?? {}).sort()).toEqual(registered);
+    expect(Object.values(none.flags ?? {}).every((on) => on === false)).toBe(true);
+
+    vi.stubEnv('CHORD_FEATURE_FLAGS', 'whats_new');
+    const flagged = createServer(createApp(new ConnectionManager()));
+    await new Promise<void>((resolve) => flagged.listen(0, '127.0.0.1', resolve));
+    try {
+      const url = `http://127.0.0.1:${(flagged.address() as AddressInfo).port}/health`;
+      const on = ServerHealthSchema.parse(await (await fetch(url)).json());
+      expect(Object.keys(on.flags ?? {}).sort()).toEqual(registered);
+      expect(on.flags?.whats_new).toBe(true);
+    } finally {
+      vi.stubEnv('CHORD_FEATURE_FLAGS', '');
+      await new Promise<void>((resolve) => flagged.close(() => resolve()));
+    }
   });
 });
