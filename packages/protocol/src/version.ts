@@ -45,9 +45,11 @@ export const ServerHealthSchema = z.object({
   epoch: z.string().optional(),
   /**
    * The feature flags the server turns on (devstation-mg6u.90); optional because a server
-   * before them does not send any, which the app reads as every flag off.
+   * before them does not send any, which the app reads as every flag off. A flags field this
+   * app cannot read (a later server's richer values) also reads as none: it must never fail
+   * the whole answer, or the version verdict with it (devstation-mg6u.94).
    */
-  flags: FeatureFlagsSchema.optional(),
+  flags: FeatureFlagsSchema.optional().catch(undefined),
 });
 export type ServerHealth = z.infer<typeof ServerHealthSchema>;
 
