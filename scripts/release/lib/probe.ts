@@ -39,6 +39,20 @@ async function readServedBytes(url: string): Promise<{ status: number; bytes: Bu
 }
 
 /**
+ * The version a page the site served names, or why it names none. A site whose rewrite lags
+ * answers 200 with its own HTML (the SPA fallback): that is a lagging site, not a crash.
+ */
+function servedVersion(bytes: Buffer, manifest: string): string {
+  try {
+    const { version } = parseUpdateInfo(bytes.toString('utf8'), manifest, pathToFileURL(manifest));
+    if (typeof version === 'string' && version) return version;
+    return 'a page that is not a manifest (it names no version)';
+  } catch (error) {
+    return `a page that is not a manifest (${(error as Error).message.split('\n')[0]})`;
+  }
+}
+
+/**
  * The site's download dialog reads `<site>/releases/<manifest>` (devstation-mg6u.44, a rewrite to
  * the release bucket), so users see the release once that names the tag. The site may lag: it is
  * polled until it names the version or `waitMs` runs out (devstation-nfna, C8/F15).
@@ -59,11 +73,7 @@ async function probeSite(
       })
     );
     if (served.bytes) {
-      seen = parseUpdateInfo(
-        served.bytes.toString('utf8'),
-        manifest,
-        pathToFileURL(manifest)
-      ).version;
+      seen = servedVersion(served.bytes, manifest);
       if (seen === version) {
         const waited = Math.round((Date.now() - started) / 1000);
         return { name, ok: true, detail: `the site serves ${version} after ${waited} s` };

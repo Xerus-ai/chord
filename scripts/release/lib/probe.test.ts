@@ -140,4 +140,38 @@ describe('probeRelease', () => {
     expect(site?.detail).toContain('0.9.0');
     expect(stale.ok).toBe(false);
   });
+
+  // A site whose rewrite lags answers 200 with its HTML page (the SPA fallback), not a manifest.
+  // The probe must keep polling and, if the site never catches up, record a failed check - not
+  // throw out of the loop and leave no receipt.
+  it('the site check keeps polling past a page that is not a manifest', async () => {
+    const page = '<!doctype html><html><body>chord</body></html>';
+    const files: Record<string, string | Buffer> = {
+      'v1-stable.yml': manifest('1.0.0', sha512(INSTALLER)),
+      'chord-1.0.0-x64.exe': INSTALLER,
+      'releases/v1-stable.yml': page,
+    };
+    const baseUrl = await serve(files);
+    setTimeout(() => (files['releases/v1-stable.yml'] = manifest('1.0.0', sha512(INSTALLER))), 150);
+
+    const caughtUp = await probeRelease({
+      tag: 'v1.0.0',
+      baseUrl,
+      manifests: ['v1-stable.yml'],
+      site: { url: baseUrl, waitMs: 3000, intervalMs: 50 },
+    });
+    expect(caughtUp.checks.find((c) => c.name === 'site v1-stable.yml version')?.ok).toBe(true);
+
+    files['releases/v1-stable.yml'] = page;
+    const never = await probeRelease({
+      tag: 'v1.0.0',
+      baseUrl,
+      manifests: ['v1-stable.yml'],
+      site: { url: baseUrl, waitMs: 300, intervalMs: 50 },
+    });
+    const site = never.checks.find((c) => c.name === 'site v1-stable.yml version');
+    expect(site?.ok).toBe(false);
+    expect(site?.detail).toContain('not a manifest');
+    expect(never.ok).toBe(false);
+  });
 });
