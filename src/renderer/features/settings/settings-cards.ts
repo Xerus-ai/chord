@@ -133,6 +133,12 @@ export const SETTINGS_CARDS: readonly SettingsCardMeta[] = [
     title: 'Updates',
     keywords: ['update', 'version', 'release', 'upgrade'],
   },
+  {
+    id: 'preview-features',
+    tab: 'general',
+    title: 'Preview features',
+    keywords: ['preview', 'feature', 'flag', 'beta', 'experimental'],
+  },
 
   // Agents
   {

@@ -26,6 +26,7 @@ import IntegrationsCard from './IntegrationsCard';
 import KeyboardSettingsCard from './KeyboardSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
 import NotificationTypePreferences from './NotificationTypePreferences';
+import { PreviewFeaturesCard } from './PreviewFeaturesCard';
 import { PublishingSettingsCard } from './PublishingSettingsCard';
 import QualityGatesCard from './QualityGatesCard';
 import RepositoriesCard from './RepositoriesCard';
@@ -58,6 +59,7 @@ const CARD_COMPONENTS: Record<
   notifications: { component: <NotificationSettingsCard /> },
   'notification-types': { component: <NotificationTypePreferences /> },
   updates: { component: <UpdateCard /> },
+  'preview-features': { component: <PreviewFeaturesCard /> },
   account: { component: <AccountTab /> },
   'default-agent': { component: <DefaultAgentSettingsCard /> },
   'agent-launch': { component: <AgentLaunchSettingsCard /> },
@@ -97,7 +99,7 @@ const TAB_HEADINGS: Record<
 > = {
   general: {
     title: 'General',
-    description: 'Your account, privacy, and app updates.',
+    description: 'Your account, privacy, app updates and preview features.',
   },
   'clis-models': {
     title: 'Agents & models',

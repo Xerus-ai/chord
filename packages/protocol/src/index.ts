@@ -9,6 +9,7 @@
 
 export * from './chat.js';
 export * from './commands.js';
+export * from './feature-flags.js';
 export * from './git-state.js';
 export * from './notifications.js';
 export * from './permission-requests.js';

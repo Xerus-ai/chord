@@ -62,6 +62,7 @@ export const appController = createRPCController({
   }),
   getAppVersion: () => appService.getCachedAppVersion(),
   getDesktopCompatibility: () => desktopCompatibilityService.getState(),
+  getFeatureFlags: () => desktopCompatibilityService.getFeatureFlags(),
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
   isWindowFullScreen: () => isMainWindowFullScreen(),

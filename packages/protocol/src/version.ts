@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FeatureFlagsSchema } from './feature-flags.js';
 
 /**
  * The version handshake: the sync server names the oldest
@@ -42,6 +43,11 @@ export const ServerHealthSchema = z.object({
   commit: z.string().nullable().optional(),
   /** Fixed per server process; changes on every restart. */
   epoch: z.string().optional(),
+  /**
+   * The feature flags the server turns on (devstation-mg6u.90); optional because a server
+   * before them does not send any, which the app reads as every flag off.
+   */
+  flags: FeatureFlagsSchema.optional(),
 });
 export type ServerHealth = z.infer<typeof ServerHealthSchema>;
 
