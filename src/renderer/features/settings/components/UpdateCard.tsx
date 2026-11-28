@@ -6,6 +6,7 @@ import { Badge } from '@renderer/lib/ui/badge';
 import { Button } from '@renderer/lib/ui/button';
 import { formatBytes } from '@renderer/utils/formatBytes';
 import { SettingRow } from './SettingRow';
+import { WhatsNew } from './WhatsNew';
 
 export function UpdateCard(): React.JSX.Element {
   const updateState = useUpdateStore((s) => s.state);
@@ -75,6 +76,8 @@ export function UpdateCard(): React.JSX.Element {
           )}
         </div>
       )}
+
+      <WhatsNew />
     </div>
   );
 

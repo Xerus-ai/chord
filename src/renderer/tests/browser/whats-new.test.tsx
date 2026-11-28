@@ -17,6 +17,9 @@ Object.assign(window, {
     invoke: async (channel: string) => {
       if (channel === 'app.getFeatureFlags') return flags;
       if (channel === 'app.getAppVersion') return '1.1.0';
+      // The theme the markdown renderer reads (ThemeProvider), as the app has it.
+      if (channel === 'appSettings.getWithMeta') return { value: 'dark' };
+      if (channel === 'app.setWindowChromeTheme') return undefined;
       throw new Error(`the card asked the main process for ${channel}`);
     },
     eventOn: () => () => {},
@@ -27,6 +30,15 @@ Object.assign(window, {
 
 const { UpdateCard } = await import('@renderer/features/settings/components/UpdateCard');
 const { useUpdateStore } = await import('@renderer/lib/stores/update-store');
+const { ThemeProvider } = await import('@renderer/lib/providers/theme-provider');
+
+/** The card as the app renders it: inside the theme provider the markdown renderer needs. */
+const card = () =>
+  mount(
+    <ThemeProvider>
+      <UpdateCard />
+    </ThemeProvider>
+  );
 
 const NOTES = '### Features\n\n- **sync:** shared items open offline';
 
@@ -53,7 +65,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
 describe("what's new in Settings > Updates", () => {
   it('shows the notes of the update found, under its version', async () => {
     found(NOTES);
-    const view = mount(<UpdateCard />);
+    const view = card();
     await vi.waitFor(() => expect(view.textContent).toContain("What's new in v1.2.0"));
     expect(view.textContent).toContain('shared items open offline');
     expect(view.querySelector('h3, h4, h5')?.textContent).toContain('Features');
@@ -62,19 +74,19 @@ describe("what's new in Settings > Updates", () => {
   it('keeps showing them while the update downloads and once it is ready', async () => {
     found(NOTES);
     useUpdateStore.setState({ state: { status: 'downloading', progress: { percent: 40 } } });
-    const downloading = mount(<UpdateCard />);
+    const downloading = card();
     await vi.waitFor(() => expect(downloading.textContent).toContain("What's new in v1.2.0"));
     unmountAll();
 
     useUpdateStore.setState({ state: { status: 'downloaded' } });
-    const ready = mount(<UpdateCard />);
+    const ready = card();
     await vi.waitFor(() => expect(ready.textContent).toContain("What's new in v1.2.0"));
   });
 
   it('shows nothing while the whats_new flag is off', async () => {
     flags = { whats_new: false };
     found(NOTES);
-    const view = mount(<UpdateCard />);
+    const view = card();
     await vi.waitFor(() => expect(view.textContent).toContain('Version'));
     await settle();
     expect(view.textContent).not.toContain("What's new");
@@ -83,7 +95,7 @@ describe("what's new in Settings > Updates", () => {
 
   it('shows no heading for an update without notes', async () => {
     found(null);
-    const view = mount(<UpdateCard />);
+    const view = card();
     await vi.waitFor(() => expect(view.textContent).toContain('Version'));
     await settle();
     expect(view.textContent).not.toContain("What's new");

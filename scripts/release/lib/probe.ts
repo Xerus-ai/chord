@@ -117,6 +117,19 @@ export async function probeRelease(args: {
       ok: updateInfo.version === version,
       detail: `the manifest names ${updateInfo.version}; the tag is ${version}`,
     });
+    // The app shows these as what's new (devstation-haay, design F21).
+    const notes = updateInfo.releaseNotes;
+    const hasNotes =
+      typeof notes === 'string'
+        ? notes.trim() !== ''
+        : Array.isArray(notes) && notes.some((entry) => (entry.note ?? '').trim() !== '');
+    checks.push({
+      name: `${manifest} release notes`,
+      ok: hasNotes,
+      detail: hasNotes
+        ? 'the manifest carries release notes'
+        : 'the manifest carries no release notes',
+    });
     const seen = new Set<string>();
     for (const file of getFileList(updateInfo)) {
       if (seen.has(file.url)) continue;
