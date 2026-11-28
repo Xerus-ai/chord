@@ -31,7 +31,8 @@ describe('readReleaseManifests', () => {
 const INSTALLER = Buffer.from('the windows installer bytes');
 const sha512 = (bytes: Buffer) => createHash('sha512').update(bytes).digest('base64');
 
-function manifest(version: string, fileSha: string): string {
+/** A channel manifest; `notes` null leaves out `releaseNotes` (design F21). */
+function manifest(version: string, fileSha: string, notes: string | null = '- a fix'): string {
   return [
     `version: ${version}`,
     'files:',
@@ -41,6 +42,7 @@ function manifest(version: string, fileSha: string): string {
     `path: chord-${version}-x64.exe`,
     `sha512: ${fileSha}`,
     "releaseDate: '2026-10-31T00:00:00.000Z'",
+    ...(notes === null ? [] : [`releaseNotes: ${JSON.stringify(notes)}`]),
     '',
   ].join('\n');
 }
@@ -74,8 +76,26 @@ describe('probeRelease', () => {
     expect(receipt.tag).toBe('v1.0.0');
     expect(receipt.checks.map((c) => c.name)).toEqual([
       'v1-stable.yml version',
+      'v1-stable.yml release notes',
       'sha512 chord-1.0.0-x64.exe',
     ]);
+  });
+
+  // devstation-haay (design C6, F21): the app shows the manifest's release notes as what's new,
+  // so a release whose manifest carries none (a missing release-notes file at build) must fail.
+  it('fails a manifest without release notes, and one whose notes are blank', async () => {
+    for (const notes of [null, ' ']) {
+      const baseUrl = await serve({
+        'v1-stable.yml': manifest('1.0.0', sha512(INSTALLER), notes),
+        'chord-1.0.0-x64.exe': INSTALLER,
+      });
+      const receipt = await probeRelease({ tag: 'v1.0.0', baseUrl, manifests: ['v1-stable.yml'] });
+      const check = receipt.checks.find((c) => c.name === 'v1-stable.yml release notes');
+      expect(check?.ok).toBe(false);
+      expect(receipt.ok).toBe(false);
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      server = null;
+    }
   });
 
   it('fails a file served with a different sha512, naming it', async () => {

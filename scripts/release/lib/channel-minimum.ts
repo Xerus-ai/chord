@@ -35,6 +35,8 @@ export async function checkChannelsMeetMinimum(args: {
       tag,
       baseUrl: args.baseUrl,
       manifests: readReleaseManifests(tag),
+      // Versions and installers only: whether a release carries notes is the release probe's.
+      releaseNotes: false,
     });
     checks.push(...receipt.checks);
   }

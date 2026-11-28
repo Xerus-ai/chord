@@ -13,6 +13,7 @@ import {
 } from '@shared/events/updateEvents';
 import { events, rpc } from '@renderer/lib/ipc';
 import { log } from '@renderer/utils/logger';
+import { releaseNotesText } from './release-notes';
 
 const LAST_NOTIFIED_KEY = 'chord:update:lastNotified';
 const SNOOZE_HOURS = 6;
@@ -40,6 +41,8 @@ interface UpdateStoreState {
   state: UpdateState;
   currentVersion: string;
   availableVersion: string | undefined;
+  /** The release notes of the update found (what's new, devstation-haay); null when none. */
+  releaseNotes: string | null;
   start: () => void;
   check: () => Promise<void>;
   download: () => Promise<void>;
@@ -91,6 +94,7 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
   state: { status: 'idle' } as UpdateState,
   currentVersion: '',
   availableVersion: undefined,
+  releaseNotes: null,
 
   start: () => {
     void rpc.app.getAppVersion().then((v) => {
@@ -104,6 +108,7 @@ export const useUpdateStore = create<UpdateStoreState>()((set) => ({
     events.on(updateAvailableEvent, (d) => {
       set({
         availableVersion: d.version,
+        releaseNotes: releaseNotesText(d.updateInfo),
         state: { status: 'available', info: { version: d.version } },
       });
       maybeToastAvailable(d.version);
