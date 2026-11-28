@@ -11,6 +11,8 @@ import '@renderer/index.css';
 import { mount, unmountAll } from './mount';
 
 let flags: Record<string, boolean> = { whats_new: true };
+/** The main-process events the store listens to, so a test can send one. */
+const listeners = new Map<string, (data: unknown) => void>();
 
 Object.assign(window, {
   electronAPI: {
@@ -20,9 +22,13 @@ Object.assign(window, {
       // The theme the markdown renderer reads (ThemeProvider), as the app has it.
       if (channel === 'appSettings.getWithMeta') return { value: 'dark' };
       if (channel === 'app.setWindowChromeTheme') return undefined;
+      if (channel === 'update.check') return { success: true, result: null, active: true };
       throw new Error(`the card asked the main process for ${channel}`);
     },
-    eventOn: () => () => {},
+    eventOn: (channel: string, cb: (data: unknown) => void) => {
+      listeners.set(channel, cb);
+      return () => listeners.delete(channel);
+    },
     eventSend: () => {},
     getPathForFile: () => '',
   },
@@ -91,6 +97,25 @@ describe("what's new in Settings > Updates", () => {
     await settle();
     expect(view.textContent).not.toContain("What's new");
     expect(view.textContent).not.toContain('shared items open offline');
+  });
+
+  // The wiring from main's update-available event: without it the store never holds the notes
+  // and What's new never shows, though every other case here passes (verifier, devstation-haay).
+  it('keeps the notes the update-available event carries and shows them', async () => {
+    useUpdateStore.getState().start();
+    listeners.get('update:available')?.({
+      version: '1.2.0',
+      updateInfo: {
+        version: '1.2.0',
+        releaseNotes: `
+${NOTES}
+`,
+      },
+    });
+    expect(useUpdateStore.getState().releaseNotes).toBe(NOTES);
+    const view = card();
+    await vi.waitFor(() => expect(view.textContent).toContain("What's new in v1.2.0"));
+    expect(view.textContent).toContain('shared items open offline');
   });
 
   it('shows no heading for an update without notes', async () => {
