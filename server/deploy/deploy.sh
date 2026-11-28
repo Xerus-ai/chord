@@ -15,6 +15,11 @@
 # nothing: release readiness compares it with main's deploy.sh, because the box
 # only installs a new one when bootstrap.sh runs again (devstation-mg6u.74).
 #
+# Or exactly `status`, which prints `disk_used_pct <N>` (the deploy root's
+# filesystem) and `schema_ahead_last <UTC time|none>` (the newest schema_ahead
+# line of deploy.log) and touches nothing: the release-health loop reads the box
+# through this key, never a shell (devstation-75ba).
+#
 # The key gets no shell, but it deploys code: the release's build runs as
 # deploy and the server runs it as chord, with the production .env. Treat the
 # key as the right to ship code to production.
@@ -45,6 +50,19 @@ request=${SSH_ORIGINAL_COMMAND-"$*"}
 if [[ $request == version ]]; then
   # from stdin: with a path, sha256sum escapes a backslash in it and prefixes the line with '\'
   sha256sum <"${BASH_SOURCE[0]}" | cut -d' ' -f1
+  exit 0
+fi
+if [[ $request == status ]]; then
+  status_root=${DEPLOY_ROOT:-/opt/chord}
+  status_df=$status_root
+  [[ -d $status_df ]] || status_df=/
+  pct=$(df -P "$status_df" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
+  last=none
+  if [[ -f $status_root/shared/deploy.log ]]; then
+    line=$(grep 'schema_ahead: true' "$status_root/shared/deploy.log" | tail -n 1 || true)
+    [[ -n $line ]] && last=${line%% *}
+  fi
+  printf 'disk_used_pct %s\nschema_ahead_last %s\n' "$pct" "$last"
   exit 0
 fi
 re='^deploy (v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?) ([0-9a-f]{40})$'

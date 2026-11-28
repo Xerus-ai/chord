@@ -26,6 +26,11 @@ problem. Follow this top to bottom.
 - The deploy key can't open a shell, but it can ship code: the build runs as
   `deploy`, and the server runs as `chord` with the production `.env`. Guard
   it like a production credential.
+- Besides `deploy <tag> <sha>`, the key answers two read-only requests:
+  `version` (the sha256 of the installed `deploy.sh`) and `status` (disk use
+  and the newest `schema_ahead` line of `deploy.log`), which the harness's
+  release-health check reads. The box only installs a changed `deploy.sh` when
+  `bootstrap.sh` runs again; until then `status` is refused.
 - **Rolling back by hand.** `deploy.sh` can't do this: `migrate --status`
   refuses a release that is older than the database. As root:
 
