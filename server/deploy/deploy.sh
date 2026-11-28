@@ -54,13 +54,26 @@ if [[ $request == version ]]; then
 fi
 if [[ $request == status ]]; then
   status_root=${DEPLOY_ROOT:-/opt/chord}
-  status_df=$status_root
-  [[ -d $status_df ]] || status_df=/
-  pct=$(df -P "$status_df" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
+  # Fail, never a default: a reading that stands in for one it could not make reads as healthy.
+  if [[ ! -d $status_root ]]; then
+    echo "deploy.sh: status: no deploy root at $status_root" >&2
+    exit 1
+  fi
+  pct=$(df -P "$status_root" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
   last=none
-  if [[ -f $status_root/shared/deploy.log ]]; then
-    line=$(grep 'schema_ahead: true' "$status_root/shared/deploy.log" | tail -n 1 || true)
-    [[ -n $line ]] && last=${line%% *}
+  status_log=$status_root/shared/deploy.log
+  if [[ -e $status_log ]]; then
+    # grep exits 1 for no match (none) and 2 when it cannot read the log (a failure).
+    rc=0
+    lines=$(grep 'schema_ahead: true' "$status_log" 2>&1) || rc=$?
+    if ((rc > 1)); then
+      echo "deploy.sh: status: cannot read $status_log: $lines" >&2
+      exit 1
+    fi
+    if ((rc == 0)); then
+      line=${lines##*$'\n'}
+      last=${line%% *}
+    fi
   fi
   printf 'disk_used_pct %s\nschema_ahead_last %s\n' "$pct" "$last"
   exit 0

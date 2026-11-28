@@ -214,6 +214,19 @@ describe('deploy.sh', () => {
     }
   });
 
+  // Verifier (PR #50): an unreadable deploy.log read as "none" and a missing deploy root measured
+  // as `/` would both pass as healthy; status fails instead.
+  it('deploy.sh status fails on an unreadable deploy.log and on a missing deploy root', async () => {
+    const { root, run } = await box();
+    mkdirSync(join(root, 'shared', 'deploy.log'), { recursive: true });
+    const unreadable = run('status');
+    expect(unreadable.code, unreadable.out).toBe(1);
+    expect(unreadable.out).not.toMatch(/schema_ahead_last none/);
+    const missing = run('status', undefined, { DEPLOY_ROOT: join(root, 'not-there').replace(/\\/g, '/') });
+    expect(missing.code, missing.out).toBe(1);
+    expect(missing.out).not.toMatch(/disk_used_pct/);
+  });
+
   it('a failed health check flips back to the live release', { timeout: 120_000 }, async () => {
     const { root, run } = await box();
     const releases = join(root, 'releases');
