@@ -1,4 +1,10 @@
-import { resolveFeatureFlags, type FeatureFlags, type ServerHealth } from '@chord/protocol';
+import {
+  FEATURE_FLAGS,
+  resolveFeatureFlags,
+  type FeatureFlag,
+  type FeatureFlags,
+  type ServerHealth,
+} from '@chord/protocol';
 import { featureFlagsChangedChannel } from '@shared/events/appEvents';
 import { appSettingsService } from '@main/core/settings/settings-service';
 import { events } from '@main/lib/events';
@@ -25,10 +31,15 @@ export const settingsFlagsMemory: FlagsMemory = {
   },
 };
 
+/** Whether two sets of flags agree on every registered flag. */
+function sameFlags(a: FeatureFlags, b: FeatureFlags): boolean {
+  return (Object.keys(FEATURE_FLAGS) as FeatureFlag[]).every((flag) => a[flag] === b[flag]);
+}
+
 export class FeatureFlagsStore {
   private flags: FeatureFlags = resolveFeatureFlags(undefined);
   /** What the memory holds, so it is written only when the server's answer changes. */
-  private remembered: string | null = null;
+  private remembered: FeatureFlags | null = null;
 
   constructor(
     private readonly options: { memory: FlagsMemory; onChange: (flags: FeatureFlags) => void }
@@ -42,7 +53,7 @@ export class FeatureFlagsStore {
   async restore(): Promise<void> {
     const kept = await this.options.memory.load();
     if (kept === null) return;
-    this.remembered = JSON.stringify(kept);
+    this.remembered = kept;
     this.set(kept);
   }
 
@@ -50,14 +61,13 @@ export class FeatureFlagsStore {
   async apply(health: ServerHealth): Promise<void> {
     const next = resolveFeatureFlags(health.flags);
     this.set(next);
-    const key = JSON.stringify(next);
-    if (key === this.remembered) return;
+    if (this.remembered !== null && sameFlags(next, this.remembered)) return;
     await this.options.memory.save(next);
-    this.remembered = key;
+    this.remembered = next;
   }
 
   private set(next: FeatureFlags): void {
-    if (JSON.stringify(next) === JSON.stringify(this.flags)) return;
+    if (sameFlags(next, this.flags)) return;
     this.flags = next;
     this.options.onChange(next);
   }

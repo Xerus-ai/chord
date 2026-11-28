@@ -1,6 +1,6 @@
 import React from 'react';
 
-interface SettingRowProps {
+interface SettingRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   title: React.ReactNode;
   description?: React.ReactNode;
   control: React.ReactNode;
@@ -12,9 +12,10 @@ interface SettingRowProps {
  * draws a hairline between siblings (`SettingsPage`), so a card is a plain
  * column of rows with no gap of its own.
  */
-export function SettingRow({ title, description, control }: SettingRowProps) {
+export function SettingRow({ title, description, control, ...rest }: SettingRowProps) {
   return (
     <div
+      {...rest}
       data-setting-row=""
       className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 py-3.5 [&+[data-setting-row]]:border-t [&+[data-setting-row]]:border-border-subtle"
     >

@@ -19,13 +19,37 @@ const TIMEOUT_MS = 10_000;
  * so a network that drops requests silently must not hold it for long.
  */
 const FIRST_READING_TIMEOUT_MS = 3_000;
+/** How long a check waits on the other readers of /health (the feature flags). */
+const HEALTH_READER_TIMEOUT_MS = 5_000;
 
-export async function readDesktopCompatibility(
-  baseUrl: string,
-  current: string,
-  timeoutMs = TIMEOUT_MS,
-  onHealth?: (health: ServerHealth) => void | Promise<void>
-): Promise<DesktopCompatibility> {
+/** A /health answer read, or why none was. */
+export type HealthReading = { health: ServerHealth } | { reason: string };
+
+/** Reads the sync server's /health once. */
+export async function readServerHealth(baseUrl: string, timeoutMs: number): Promise<HealthReading> {
+  let res: Response;
+  try {
+    // Relative to the base with a trailing slash, so a path prefix in it is kept.
+    const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    res = await fetch(new URL('health', root), { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    return { reason: `sync server unreachable: ${String(error)}` };
+  }
+  if (!res.ok) return { reason: `sync server /health answered ${res.status}` };
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch (error) {
+    return { reason: `sync server /health is not JSON: ${String(error)}` };
+  }
+  const health = ServerHealthSchema.safeParse(body);
+  if (!health.success) return { reason: `sync server /health: ${health.error.message}` };
+  return { health: health.data };
+}
+
+/** The verdict on this app's version from a /health reading. */
+export function verdictOf(reading: HealthReading, current: string): DesktopCompatibility {
+  // The version first: an app that cannot read its own version is never judged.
   if (!SemverSchema.safeParse(current).success) {
     return {
       state: 'unknown',
@@ -33,54 +57,22 @@ export async function readDesktopCompatibility(
       reason: `this app's version is unreadable: ${current}`,
     };
   }
-  let res: Response;
-  try {
-    // Relative to the base with a trailing slash, so a path prefix in it is kept.
-    const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    res = await fetch(new URL('health', root), { signal: AbortSignal.timeout(timeoutMs) });
-  } catch (error) {
-    return { state: 'unknown', checked: true, reason: `sync server unreachable: ${String(error)}` };
-  }
-  if (!res.ok) {
-    return {
-      state: 'unknown',
-      checked: true,
-      reason: `sync server /health answered ${res.status}`,
-    };
-  }
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch (error) {
-    return {
-      state: 'unknown',
-      checked: true,
-      reason: `sync server /health is not JSON: ${String(error)}`,
-    };
-  }
-  const health = ServerHealthSchema.safeParse(body);
-  if (!health.success) {
-    return {
-      state: 'unknown',
-      checked: true,
-      reason: `sync server /health: ${health.error.message}`,
-    };
-  }
-  if (onHealth) {
-    try {
-      await onHealth(health.data);
-    } catch (error) {
-      // A reader of the answer (the feature flags) must not change the verdict.
-      log.error('sync server /health reader failed', { error: String(error) });
-    }
-  }
-  const minimum = health.data.min_desktop_version ?? null;
+  if ('reason' in reading) return { state: 'unknown', checked: true, reason: reading.reason };
+  const minimum = reading.health.min_desktop_version ?? null;
   // Semver order: a prerelease sorts below its release, so a minimum admits a
   // prerelease of that version only when it names one (see MIN_DESKTOP_VERSION).
   if (minimum !== null && compareVersions(current, minimum) < 0) {
     return { state: 'update_required', current, minimum };
   }
   return { state: 'supported', current, minimum };
+}
+
+export async function readDesktopCompatibility(
+  baseUrl: string,
+  current: string,
+  timeoutMs = TIMEOUT_MS
+): Promise<DesktopCompatibility> {
+  return verdictOf(await readServerHealth(baseUrl, timeoutMs), current);
 }
 
 /** Where the minimum that last turned this app away is kept between launches. */
@@ -110,8 +102,14 @@ export interface DesktopCompatibilityMonitorOptions {
    * reading unknown, which would open its traffic to the server.
    */
   memory: VerdictMemory;
-  /** Each /health answer read, for what else rides it (the feature flags, devstation-mg6u.90). */
+  /**
+   * Each /health answer read, for what else rides it (the feature flags, devstation-mg6u.90).
+   * Run after the verdict is reported, bounded by `healthReaderTimeoutMs`: a reader that throws
+   * or stalls is logged and never changes or delays the verdict (devstation-mg6u.98).
+   */
   onHealth?: (health: ServerHealth) => void | Promise<void>;
+  /** How long a check waits on `onHealth`; 5 s when unset. */
+  healthReaderTimeoutMs?: number;
 }
 
 /**
@@ -127,6 +125,8 @@ export class DesktopCompatibilityMonitor {
   };
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** Stopped for good: a start after stop() (a service disposed mid-boot) reads nothing. */
+  private stopped = false;
   /** What the memory holds, so it is written only when the server's word changes. */
   private remembered: string | null = null;
 
@@ -141,6 +141,7 @@ export class DesktopCompatibilityMonitor {
    * until stop(). Resolves once the first check is done.
    */
   async start(): Promise<void> {
+    if (this.stopped) return;
     this.running = true;
     try {
       await this.restore();
@@ -176,6 +177,7 @@ export class DesktopCompatibilityMonitor {
   }
 
   stop(): void {
+    this.stopped = true;
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -187,13 +189,14 @@ export class DesktopCompatibilityMonitor {
     // renderer leave its placeholder, even when it is unknown.
     const first = this.state.state === 'unknown' && !this.state.checked;
     let reading: DesktopCompatibility;
+    // Read whatever the version: the flags ride the same answer, and an app that cannot read its
+    // own version still gets them.
+    const health = await readServerHealth(
+      this.options.baseUrl,
+      first ? FIRST_READING_TIMEOUT_MS : TIMEOUT_MS
+    );
     try {
-      reading = await readDesktopCompatibility(
-        this.options.baseUrl,
-        await this.options.currentVersion(),
-        first ? FIRST_READING_TIMEOUT_MS : TIMEOUT_MS,
-        this.options.onHealth
-      );
+      reading = verdictOf(health, await this.options.currentVersion());
     } catch (error) {
       reading = {
         state: 'unknown',
@@ -212,7 +215,28 @@ export class DesktopCompatibilityMonitor {
     }
     this.options.onVerdict(this.state);
     await this.remember(this.state);
+    if ('health' in health) await this.readHealth(health.health);
     return reading;
+  }
+
+  /** The other readers of the answer, after the verdict and bounded: they never hold it. */
+  private async readHealth(health: ServerHealth): Promise<void> {
+    const reader = this.options.onHealth;
+    if (!reader) return;
+    const limit = this.options.healthReaderTimeoutMs ?? HEALTH_READER_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => reader(health)),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`did not finish in ${limit} ms`)), limit);
+        }),
+      ]);
+    } catch (error) {
+      log.error('sync server /health reader failed', { error: String(error) });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async checkAndSchedule(): Promise<void> {

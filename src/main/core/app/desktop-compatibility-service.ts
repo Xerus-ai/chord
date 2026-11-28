@@ -39,6 +39,8 @@ class DesktopCompatibilityService implements IInitializable, IDisposable {
 
   initialize(): void {
     // The kept flags first, so the first reading replaces them and never the other way round.
+    // An unreadable memory is logged and the monitor starts anyway: every flag stays off, the
+    // safe state, as with the verdict memory. Disposed meanwhile, the monitor's start is a no-op.
     void featureFlagsStore
       .restore()
       .catch((error: unknown) =>

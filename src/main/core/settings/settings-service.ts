@@ -4,7 +4,7 @@ import { db } from '@main/db/client';
 import { appSettings } from '@main/db/schema';
 import type { IInitializable } from '@main/lib/lifecycle';
 import { APP_SETTINGS_SCHEMA_MAP } from './schema';
-import { getDefaultForKey } from './settings-registry';
+import { getDefaultForKey, INTERNAL_SETTINGS_KEYS } from './settings-registry';
 import { computeDelta, computeTrueOverrides, isDeepEqual, isPlainObject, mergeDeep } from './utils';
 
 export type { AppSettings, AppSettingsKey } from '@shared/app-settings';
@@ -49,6 +49,12 @@ export class SettingsStore implements IInitializable {
       value = mergeDeep(defaults as Record<string, unknown>, raw) as AppSettings[K];
     } else {
       value = raw as AppSettings[K];
+    }
+    if (INTERNAL_SETTINGS_KEYS.has(key)) {
+      const parsed = APP_SETTINGS_SCHEMA_MAP[key].safeParse(value);
+      if (!parsed.success) {
+        throw new Error(`stored settings key ${key} is invalid: ${parsed.error.message}`);
+      }
     }
 
     this.cache[key] = value;
@@ -135,8 +141,15 @@ export class SettingsStore implements IInitializable {
     return Object.fromEntries(entries) as AppSettings;
   }
 
+  /**
+   * Warms the preferences. The internal keys load with their owners (the version handshake, the
+   * feature flags), which log a row that fails validation and keep their safe state, so one bad
+   * row never stops the app from booting.
+   */
   async initialize(): Promise<void> {
-    await this.getAll();
+    await Promise.all(
+      AppSettingsKeys.filter((key) => !INTERNAL_SETTINGS_KEYS.has(key)).map((key) => this.get(key))
+    );
   }
 }
 
