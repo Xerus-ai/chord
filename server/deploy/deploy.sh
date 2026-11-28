@@ -15,6 +15,11 @@
 # nothing: release readiness compares it with main's deploy.sh, because the box
 # only installs a new one when bootstrap.sh runs again (devstation-mg6u.74).
 #
+# Or exactly `status`, which prints `disk_used_pct <N>` (the deploy root's
+# filesystem) and `schema_ahead_last <UTC time|none>` (the newest schema_ahead
+# line of deploy.log) and touches nothing: the release-health loop reads the box
+# through this key, never a shell (devstation-75ba).
+#
 # The key gets no shell, but it deploys code: the release's build runs as
 # deploy and the server runs it as chord, with the production .env. Treat the
 # key as the right to ship code to production.
@@ -45,6 +50,32 @@ request=${SSH_ORIGINAL_COMMAND-"$*"}
 if [[ $request == version ]]; then
   # from stdin: with a path, sha256sum escapes a backslash in it and prefixes the line with '\'
   sha256sum <"${BASH_SOURCE[0]}" | cut -d' ' -f1
+  exit 0
+fi
+if [[ $request == status ]]; then
+  status_root=${DEPLOY_ROOT:-/opt/chord}
+  # Fail, never a default: a reading that stands in for one it could not make reads as healthy.
+  if [[ ! -d $status_root ]]; then
+    echo "deploy.sh: status: no deploy root at $status_root" >&2
+    exit 1
+  fi
+  pct=$(df -P "$status_root" | awk 'NR == 2 { sub("%", "", $5); print $5 }')
+  last=none
+  status_log=$status_root/shared/deploy.log
+  if [[ -e $status_log ]]; then
+    # grep exits 1 for no match (none) and 2 when it cannot read the log (a failure).
+    rc=0
+    lines=$(grep 'schema_ahead: true' "$status_log" 2>&1) || rc=$?
+    if ((rc > 1)); then
+      echo "deploy.sh: status: cannot read $status_log: $lines" >&2
+      exit 1
+    fi
+    if ((rc == 0)); then
+      line=${lines##*$'\n'}
+      last=${line%% *}
+    fi
+  fi
+  printf 'disk_used_pct %s\nschema_ahead_last %s\n' "$pct" "$last"
   exit 0
 fi
 re='^deploy (v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?) ([0-9a-f]{40})$'

@@ -183,6 +183,52 @@ describe('deploy.sh', () => {
     expect(readdirSync(root)).toEqual([]);
   });
 
+  // devstation-75ba: the release-health loop reads the box through the deploy key, which gets no
+  // shell, so the script answers `status` itself: disk use and the newest schema_ahead line. The
+  // bugs: a status that creates the deploy root, misses the newest line, or lets a variant through.
+  it('deploy.sh answers status with disk use and the newest schema_ahead time, touching nothing', async () => {
+    const { root, run } = await box();
+    const empty = run('status');
+    expect(empty.code, empty.out).toBe(0);
+    expect(empty.out).toMatch(/^disk_used_pct \d{1,3}$/m);
+    expect(empty.out).toMatch(/^schema_ahead_last none$/m);
+    expect(readdirSync(root)).toEqual([]);
+
+    mkdirSync(join(root, 'shared'), { recursive: true });
+    writeFileSync(
+      join(root, 'shared', 'deploy.log'),
+      [
+        '2026-11-01T10:00:00Z v1.0.0 schema_ahead: true (migrations of v1.0.0 are applied; the live release runs on them)',
+        '2026-11-02T10:00:00Z v1.0.1 live',
+        '2026-11-03T10:00:00Z v1.0.2 schema_ahead: true (migrations of v1.0.2 are applied; the live release runs on them)',
+        '2026-11-04T10:00:00Z v1.0.3 live',
+        '',
+      ].join('\n')
+    );
+    const logged = run('status');
+    expect(logged.code, logged.out).toBe(0);
+    expect(logged.out).toMatch(/^schema_ahead_last 2026-11-03T10:00:00Z$/m);
+    expect(readdirSync(root)).toEqual(['shared']);
+    for (const request of ['status x', 'status;id', ' status', 'status\nid']) {
+      expect(run(request).code, `request ${JSON.stringify(request)}`).toBe(2);
+    }
+  });
+
+  // Verifier (PR #50): an unreadable deploy.log read as "none" and a missing deploy root measured
+  // as `/` would both pass as healthy; status fails instead.
+  it('deploy.sh status fails on an unreadable deploy.log and on a missing deploy root', async () => {
+    const { root, run } = await box();
+    mkdirSync(join(root, 'shared', 'deploy.log'), { recursive: true });
+    const unreadable = run('status');
+    expect(unreadable.code, unreadable.out).toBe(1);
+    expect(unreadable.out).not.toMatch(/schema_ahead_last none/);
+    const missing = run('status', undefined, {
+      DEPLOY_ROOT: join(root, 'not-there').replace(/\\/g, '/'),
+    });
+    expect(missing.code, missing.out).toBe(1);
+    expect(missing.out).not.toMatch(/disk_used_pct/);
+  });
+
   it('a failed health check flips back to the live release', { timeout: 120_000 }, async () => {
     const { root, run } = await box();
     const releases = join(root, 'releases');
