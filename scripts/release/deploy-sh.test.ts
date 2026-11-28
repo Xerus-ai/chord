@@ -222,7 +222,9 @@ describe('deploy.sh', () => {
     const unreadable = run('status');
     expect(unreadable.code, unreadable.out).toBe(1);
     expect(unreadable.out).not.toMatch(/schema_ahead_last none/);
-    const missing = run('status', undefined, { DEPLOY_ROOT: join(root, 'not-there').replace(/\\/g, '/') });
+    const missing = run('status', undefined, {
+      DEPLOY_ROOT: join(root, 'not-there').replace(/\\/g, '/'),
+    });
     expect(missing.code, missing.out).toBe(1);
     expect(missing.out).not.toMatch(/disk_used_pct/);
   });
