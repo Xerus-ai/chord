@@ -1,3 +1,4 @@
+import type { FeatureFlags } from '@chord/protocol';
 import type { DependencyStatusUpdatedEvent } from '@shared/dependencies';
 import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { defineEvent } from '@shared/ipc/events';
@@ -69,3 +70,6 @@ export const dependencyStatusUpdatedChannel = defineEvent<DependencyStatusUpdate
 export const desktopCompatibilityChangedChannel = defineEvent<DesktopCompatibility>(
   'app:desktop-compatibility'
 );
+
+/** The feature flags the sync server turns on changed (devstation-mg6u.90). */
+export const featureFlagsChangedChannel = defineEvent<FeatureFlags>('app:feature-flags');

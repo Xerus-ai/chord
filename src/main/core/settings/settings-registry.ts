@@ -88,6 +88,9 @@ export const SETTINGS_DEFAULTS = {
   desktopCompatibility: {
     requiredMinimum: null,
   },
+  featureFlags: {
+    served: null,
+  },
 } satisfies SettingsDefaultsMap;
 
 export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[K] {

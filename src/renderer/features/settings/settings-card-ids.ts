@@ -9,6 +9,7 @@ export type SettingsCardId =
   | 'notifications'
   | 'notification-types'
   | 'updates'
+  | 'preview-features'
   | 'account'
   | 'default-agent'
   | 'agent-launch'
@@ -48,6 +49,7 @@ export const CARD_FALLBACK_LABELS: Record<SettingsCardId, string> = {
   notifications: 'Notifications',
   'notification-types': 'Notification types',
   updates: 'Updates',
+  'preview-features': 'Preview features',
   account: 'Account',
   'default-agent': 'Default agent',
   'agent-launch': 'Open agents in',

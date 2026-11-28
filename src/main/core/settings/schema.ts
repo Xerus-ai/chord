@@ -201,6 +201,15 @@ export const desktopCompatibilitySettingsSchema = z.object({
   requiredMinimum: z.string().min(1).nullable(),
 });
 
+/**
+ * Not a preference: the feature flags the sync server last turned on (devstation-mg6u.90), kept
+ * so an offline relaunch shows what the server last said. Null until the server first answers:
+ * every flag off.
+ */
+export const featureFlagsSettingsSchema = z.object({
+  served: z.record(z.string(), z.boolean()).nullable(),
+});
+
 export const APP_SETTINGS_SCHEMA_MAP = {
   localProject: localProjectSettingsSchema,
   git: gitSettingsSchema,
@@ -223,6 +232,7 @@ export const APP_SETTINGS_SCHEMA_MAP = {
   artifacts: artifactsSettingsSchema,
   sharing: sharingSettingsSchema,
   desktopCompatibility: desktopCompatibilitySettingsSchema,
+  featureFlags: featureFlagsSettingsSchema,
 } as const;
 
 export const appSettingsSchema = z.object({
@@ -247,4 +257,5 @@ export const appSettingsSchema = z.object({
   artifacts: artifactsSettingsSchema,
   sharing: sharingSettingsSchema,
   desktopCompatibility: desktopCompatibilitySettingsSchema,
+  featureFlags: featureFlagsSettingsSchema,
 });

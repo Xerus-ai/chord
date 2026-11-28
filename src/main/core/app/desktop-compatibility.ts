@@ -1,4 +1,9 @@
-import { compareVersions, SemverSchema, ServerHealthSchema } from '@chord/protocol';
+import {
+  compareVersions,
+  SemverSchema,
+  ServerHealthSchema,
+  type ServerHealth,
+} from '@chord/protocol';
 import type { DesktopCompatibility } from '@shared/desktop-compatibility';
 import { log } from '@main/lib/logger';
 
@@ -18,7 +23,8 @@ const FIRST_READING_TIMEOUT_MS = 3_000;
 export async function readDesktopCompatibility(
   baseUrl: string,
   current: string,
-  timeoutMs = TIMEOUT_MS
+  timeoutMs = TIMEOUT_MS,
+  onHealth?: (health: ServerHealth) => void | Promise<void>
 ): Promise<DesktopCompatibility> {
   if (!SemverSchema.safeParse(current).success) {
     return {
@@ -60,6 +66,14 @@ export async function readDesktopCompatibility(
       reason: `sync server /health: ${health.error.message}`,
     };
   }
+  if (onHealth) {
+    try {
+      await onHealth(health.data);
+    } catch (error) {
+      // A reader of the answer (the feature flags) must not change the verdict.
+      log.error('sync server /health reader failed', { error: String(error) });
+    }
+  }
   const minimum = health.data.min_desktop_version ?? null;
   // Semver order: a prerelease sorts below its release, so a minimum admits a
   // prerelease of that version only when it names one (see MIN_DESKTOP_VERSION).
@@ -96,6 +110,8 @@ export interface DesktopCompatibilityMonitorOptions {
    * reading unknown, which would open its traffic to the server.
    */
   memory: VerdictMemory;
+  /** Each /health answer read, for what else rides it (the feature flags, devstation-mg6u.90). */
+  onHealth?: (health: ServerHealth) => void | Promise<void>;
 }
 
 /**
@@ -175,7 +191,8 @@ export class DesktopCompatibilityMonitor {
       reading = await readDesktopCompatibility(
         this.options.baseUrl,
         await this.options.currentVersion(),
-        first ? FIRST_READING_TIMEOUT_MS : TIMEOUT_MS
+        first ? FIRST_READING_TIMEOUT_MS : TIMEOUT_MS,
+        this.options.onHealth
       );
     } catch (error) {
       reading = {

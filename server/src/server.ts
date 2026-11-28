@@ -4,6 +4,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { handlePolarWebhook } from './billing/polar-webhook.js';
 import { requireClientVersion } from './client-version.js';
+import { enabledFeatureFlags } from './feature-flags.js';
 import { DEV_MODE, requireAuth, type AuthenticatedRequest } from './middleware/auth.js';
 import { mountJsonBodyParsers } from './middleware/json-body-parsers.js';
 import {
@@ -69,6 +70,8 @@ if (trustProxyEnv !== undefined && trustProxyEnv !== 'true' && !/^[1-9]\d*$/.tes
 }
 
 export function createApp(connectionManager: ConnectionManager) {
+  // Read once per app, so an unknown flag name stops the server at boot (devstation-mg6u.90).
+  const featureFlags = enabledFeatureFlags(process.env.CHORD_FEATURE_FLAGS);
   const app = express();
 
   if (trustProxyEnv !== undefined) {
@@ -117,6 +120,8 @@ export function createApp(connectionManager: ConnectionManager) {
       epoch: SERVER_EPOCH,
       // The version handshake (devstation-mg6u.2): desktops below this are told to update.
       min_desktop_version: MIN_DESKTOP_VERSION,
+      // The feature flags on for every desktop (devstation-mg6u.90): every registered flag named.
+      flags: featureFlags,
     });
   });
 

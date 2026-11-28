@@ -89,6 +89,7 @@ Copy `server/.env.example` to `server/.env` and fill in, var by var:
 | `TRUST_PROXY` | **Set to `1`** — you're terminating TLS at a reverse proxy in step 6, one hop in front of this process. Without it, the IP-keyed rate limiters (auth endpoints) see every caller as the proxy's own address, and legitimate concurrent sign-ins throttle each other. Fails fast on boot if set to anything other than a positive integer or `true`. |
 | `SYNC_SERVER_URL` | `https://<your-domain>` — **required.** The public origin of this server: public artifact links (`/p/<token>`) and their OpenGraph `og:url` are built from it. The server refuses to start without it. |
 | `SHARE_LINK_SECRET` | **Required.** 32+ random bytes (`openssl rand -base64 48`). Public artifact link tokens are HMACs of the link id under this secret; the database stores only their hashes. Rotating it invalidates every public link. The server refuses to start without it. |
+| `CHORD_FEATURE_FLAGS` | Optional. Comma-separated feature flags to turn on for every desktop, from the registry in `packages/protocol/src/feature-flags.ts` (e.g. `whats_new`); `/health` serves them as `flags`. Unset turns none on. A name not in the registry stops the server at boot, naming it. To flip one on the box: edit `/opt/chord/shared/.env`, restart the unit, check `/health`. Apps read it at the next check (within 30 min; at once on launch). |
 
 You'll also configure the **Electron client's** build-time env to point at
 this deployment — not covered here (client repo root `.env.example`), but
