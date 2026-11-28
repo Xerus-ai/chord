@@ -23,10 +23,10 @@ const FIRST_READING_TIMEOUT_MS = 3_000;
 const HEALTH_READER_TIMEOUT_MS = 5_000;
 
 /** A /health answer read, or why none was. */
-export type HealthReading = { health: ServerHealth } | { reason: string };
+type HealthReading = { health: ServerHealth } | { reason: string };
 
 /** Reads the sync server's /health once. */
-export async function readServerHealth(baseUrl: string, timeoutMs: number): Promise<HealthReading> {
+async function readServerHealth(baseUrl: string, timeoutMs: number): Promise<HealthReading> {
   let res: Response;
   try {
     // Relative to the base with a trailing slash, so a path prefix in it is kept.
@@ -48,7 +48,7 @@ export async function readServerHealth(baseUrl: string, timeoutMs: number): Prom
 }
 
 /** The verdict on this app's version from a /health reading. */
-export function verdictOf(reading: HealthReading, current: string): DesktopCompatibility {
+function verdictOf(reading: HealthReading, current: string): DesktopCompatibility {
   // The version first: an app that cannot read its own version is never judged.
   if (!SemverSchema.safeParse(current).success) {
     return {

@@ -48,4 +48,19 @@ describe('internal settings', () => {
       .execute();
     await expect(new SettingsStore().get('featureFlags')).rejects.toThrow(/featureFlags/);
   });
+
+  // A bad internal row must not stop the app at boot: its owner logs it and keeps the safe state.
+  it('boot still loads the preferences when an internal row is invalid', async () => {
+    await db
+      .insert(appSettings)
+      .values({ key: 'desktopCompatibility', value: JSON.stringify({ requiredMinimum: 7 }) })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: JSON.stringify({ requiredMinimum: 7 }) },
+      })
+      .execute();
+    const store = new SettingsStore();
+    await expect(store.initialize()).resolves.toBeUndefined();
+    expect((await store.get('sharing')).defaultWorkItemAccess).toBe('invited');
+  });
 });
