@@ -98,6 +98,11 @@ export async function probeRelease(args: {
   baseUrl: string;
   manifests: readonly string[];
   site?: { url: string; waitMs: number; intervalMs: number };
+  /**
+   * Require release notes in each manifest (default true): the app shows them as what's new
+   * (devstation-haay). The minimum-version check reuses the probe for versions and files only.
+   */
+  releaseNotes?: boolean;
 }): Promise<ProbeReceipt> {
   const version = args.tag.replace(/^v/, '');
   const checks: ProbeCheck[] = [];
@@ -118,18 +123,20 @@ export async function probeRelease(args: {
       detail: `the manifest names ${updateInfo.version}; the tag is ${version}`,
     });
     // The app shows these as what's new (devstation-haay, design F21).
-    const notes = updateInfo.releaseNotes;
-    const hasNotes =
-      typeof notes === 'string'
-        ? notes.trim() !== ''
-        : Array.isArray(notes) && notes.some((entry) => (entry.note ?? '').trim() !== '');
-    checks.push({
-      name: `${manifest} release notes`,
-      ok: hasNotes,
-      detail: hasNotes
-        ? 'the manifest carries release notes'
-        : 'the manifest carries no release notes',
-    });
+    if (args.releaseNotes !== false) {
+      const notes = updateInfo.releaseNotes;
+      const hasNotes =
+        typeof notes === 'string'
+          ? notes.trim() !== ''
+          : Array.isArray(notes) && notes.some((entry) => (entry.note ?? '').trim() !== '');
+      checks.push({
+        name: `${manifest} release notes`,
+        ok: hasNotes,
+        detail: hasNotes
+          ? 'the manifest carries release notes'
+          : 'the manifest carries no release notes',
+      });
+    }
     const seen = new Set<string>();
     for (const file of getFileList(updateInfo)) {
       if (seen.has(file.url)) continue;
