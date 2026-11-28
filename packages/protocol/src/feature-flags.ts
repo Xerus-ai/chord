@@ -5,7 +5,9 @@ import { z } from 'zod';
  * and the sync server's /health names which flags are on. A feature epic's first story adds its
  * flag here; its last story removes the flag and every check of it. A flag the server does not
  * turn on is off, so an app offline since its install, or on a server that predates a flag,
- * never shows unfinished work.
+ * never shows unfinished work. Before the release that removes a flag deploys, take its name out
+ * of the server's CHORD_FEATURE_FLAGS: a name not in the registry stops the server at boot
+ * (server/DEPLOYMENT.md).
  */
 export const FEATURE_FLAGS = {
   whats_new: {

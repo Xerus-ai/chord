@@ -1,7 +1,7 @@
 import { Search, X } from 'lucide-react';
 import React, { useMemo, useRef, useState } from 'react';
 import type { SettingsCardId } from '@renderer/features/settings/settings-card-ids';
-import { searchSettingsCards } from '@renderer/features/settings/settings-cards';
+import { searchSettingsCards } from '@renderer/features/settings/settings-search';
 import { cn } from '@renderer/utils/utils';
 
 /**

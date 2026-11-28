@@ -9,12 +9,14 @@ import { createRoot, type Root } from 'react-dom/client';
  */
 const mounted: { root: Root; host: HTMLDivElement }[] = [];
 
-/** Renders `node` synchronously into a fresh element on the page and returns that element. */
-export function mount(node: ReactNode): HTMLElement {
+/**
+ * Renders `node` synchronously into a fresh element on the page and returns that element; a
+ * test that needs state to outlive one mount passes its own query client.
+ */
+export function mount(node: ReactNode, client: QueryClient = new QueryClient()): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host);
-  const client = new QueryClient();
   flushSync(() => root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
   mounted.push({ root, host });
   return host;

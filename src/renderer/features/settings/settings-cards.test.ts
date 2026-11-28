@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveSettingsCardId,
   resolveSettingsTab,
-  searchSettingsCards,
   SETTINGS_CARDS,
   SETTINGS_GROUPS,
   SETTINGS_TABS,
-  settingsCardBreadcrumb,
   settingsCardDomId,
-  settingsCardLabel,
   settingsCardsForTab,
   tabForSettingsCard,
 } from '@renderer/features/settings/settings-cards';
+import {
+  searchSettingsCards,
+  settingsCardBreadcrumb,
+  settingsCardLabel,
+} from '@renderer/features/settings/settings-search';
 
 /**
  * The component map in `SettingsPage` is keyed by `SettingsCardId`, so

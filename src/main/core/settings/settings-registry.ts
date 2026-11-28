@@ -97,3 +97,13 @@ export function getDefaultForKey<K extends AppSettingsKey>(key: K): AppSettings[
   const d = SETTINGS_DEFAULTS[key];
   return (typeof d === 'function' ? (d as () => AppSettings[K])() : d) as AppSettings[K];
 }
+
+/**
+ * Keys main keeps for itself, not preferences: the sync server's last word on this app's version
+ * and on the feature flags. The renderer's settings RPC may not write them, and a stored row of
+ * either is validated on load (devstation-mg6u.98).
+ */
+export const INTERNAL_SETTINGS_KEYS: ReadonlySet<AppSettingsKey> = new Set<AppSettingsKey>([
+  'desktopCompatibility',
+  'featureFlags',
+]);

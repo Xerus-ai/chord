@@ -45,12 +45,11 @@ async function flagServer(flags) {
   const real = upstream();
   const tls = real.protocol === 'https:';
   const prefix = real.pathname.replace(/\/$/, '');
-  let realHealth = { status: 'ok' };
-  try {
-    realHealth = await (await fetch(new URL('health', real))).json();
-  } catch (error) {
-    console.log(`the real /health was not read (${String(error)}); serving status ok only`);
-  }
+  // The stand-in serves the real answer with the flags swapped in: unread, the run would test
+  // a made-up /health, so it stops here instead.
+  const answer = await fetch(new URL('health', real));
+  if (!answer.ok) throw new Error(`the real sync server's /health answered ${answer.status}`);
+  const realHealth = await answer.json();
   const server = createServer((req, res) => {
     if ((req.url ?? '/').split('?')[0] === '/health') {
       res.setHeader('content-type', 'application/json');
@@ -70,7 +69,12 @@ async function flagServer(flags) {
         upstreamRes.pipe(res);
       }
     );
-    forward.on('error', () => res.writeHead(502).end());
+    forward.on('error', (error) => {
+      console.log(`forwarding ${req.method} ${req.url} failed: ${String(error)}`);
+      // Headers already sent: the response can only be cut off.
+      if (res.headersSent) res.destroy(error);
+      else res.writeHead(502).end();
+    });
     req.pipe(forward);
   });
   server.on('upgrade', (req, socket, head) => {

@@ -15,26 +15,38 @@ type RowState = 'on' | 'off' | 'pending' | 'error';
  */
 export function PreviewFeaturesCard(): React.JSX.Element {
   const { data: flags, isPending, isError } = useFeatureFlags();
+  const registered = Object.keys(FEATURE_FLAGS) as FeatureFlag[];
   return (
-    <div className="grid gap-3">
-      {(Object.keys(FEATURE_FLAGS) as FeatureFlag[]).map((flag) => {
-        const state: RowState = isError
-          ? 'error'
-          : isPending
-            ? 'pending'
-            : flags?.[flag] === true
-              ? 'on'
-              : 'off';
-        return (
-          <div key={flag} data-testid={`feature-flag-${flag}`} data-state={state}>
+    <div>
+      <p className="pt-3.5 text-tiny tracking-tiny text-text-passive">
+        The Chord server turns these on while each feature is in preview.
+      </p>
+      {registered.length === 0 ? (
+        <p className="py-3.5 text-body tracking-body text-text-muted">No features in preview.</p>
+      ) : (
+        registered.map((flag) => {
+          const state: RowState = isError
+            ? 'error'
+            : isPending
+              ? 'pending'
+              : flags?.[flag] === true
+                ? 'on'
+                : 'off';
+          // The row itself carries the test id and state: a wrapper would break SettingRow's
+          // hairline between rows (devstation-mg6u.98).
+          return (
             <SettingRow
+              key={flag}
+              role="group"
+              aria-label={FEATURE_FLAGS[flag].title}
+              data-testid={`feature-flag-${flag}`}
+              data-state={state}
               title={FEATURE_FLAGS[flag].title}
-              description="The Chord server turns this on while the feature is in preview."
               control={<FlagBadge state={state} />}
             />
-          </div>
-        );
-      })}
+          );
+        })
+      )}
     </div>
   );
 }

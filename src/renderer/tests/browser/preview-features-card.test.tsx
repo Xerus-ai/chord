@@ -63,4 +63,19 @@ describe('Preview features card', () => {
     await expect.poll(() => row(off).dataset.state).toBe('off');
     expect(row(off).textContent).toContain('Off');
   });
+
+  // devstation-mg6u.98: a wrapper around each row broke SettingRow's hairline between rows, a
+  // row read to assistive tech as loose text, and every row repeated the same description.
+  it('each row is a labelled group with no wrapper, under one intro line', async () => {
+    answer = async () => ({ whats_new: true });
+    const host = mount(<PreviewFeaturesCard />);
+    await expect.poll(() => row(host).dataset.state).toBe('on');
+    const r = row(host);
+    expect(r.hasAttribute('data-setting-row')).toBe(true);
+    expect(r.getAttribute('role')).toBe('group');
+    expect(r.getAttribute('aria-label')).toBe("What's new");
+    const intro = host.textContent ?? '';
+    expect(intro.match(/turns this on while the feature is in preview/g) ?? []).toHaveLength(0);
+    expect(intro).toMatch(/The Chord server turns these on/);
+  });
 });

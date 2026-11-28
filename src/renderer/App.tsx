@@ -9,6 +9,7 @@ import { NotificationDropdown } from './features/notifications/notification-drop
 import { useNotifications } from './features/notifications/use-notifications';
 import { OnboardingView } from './features/onboarding/onboarding-view';
 import { DesktopCompatibilityGate } from './features/update-required/desktop-compatibility-gate';
+import { subscribeFeatureFlags } from './lib/feature-flags/use-feature-flag';
 import { useAccountSession } from './lib/hooks/useAccount';
 import { WorkspaceLayoutContextProvider } from './lib/layout/layout-provider';
 import { WorkspaceViewProvider } from './lib/layout/provider';
@@ -25,6 +26,9 @@ import { RightSidebarProvider } from './lib/ui/right-sidebar';
 import { StartupPlaceholder } from './lib/ui/startup-placeholder';
 import { TooltipProvider } from './lib/ui/tooltip';
 import { cn } from './utils/utils';
+
+// The flags main reports reach the cache for the app's lifetime, mounted readers or not.
+subscribeFeatureFlags(queryClient);
 
 const ONBOARDING_KEY_PREFIX = 'chord:has-seen-onboarding:v2:';
 const LEGACY_ONBOARDING_KEY = 'chord:has-seen-onboarding:v1';

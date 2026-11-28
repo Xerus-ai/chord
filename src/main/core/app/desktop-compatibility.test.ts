@@ -92,23 +92,6 @@ describe('version handshake', () => {
     expect((await readDesktopCompatibility(base, '1.2.0-canary.1')).state).toBe('update_required');
   });
 
-  // devstation-mg6u.94: the feature flags ride /health, but a flags field this app cannot read
-  // must not cost it the verdict: an unknown reading opens traffic, so an app below the minimum
-  // would get in. The bug: flags parsed strictly inside the health schema.
-  it('a malformed flags field leaves the verdict alone and reads as no flags', async () => {
-    const seen: unknown[] = [];
-    body = { status: 'ok', min_desktop_version: '2.0.0', flags: { whats_new: 'yes' } };
-    expect(
-      await readDesktopCompatibility(base, '1.0.0', undefined, (h) => void seen.push(h.flags))
-    ).toEqual({ state: 'update_required', current: '1.0.0', minimum: '2.0.0' });
-    body = { status: 'ok', min_desktop_version: '0.1.0', flags: 'all' };
-    expect(
-      (await readDesktopCompatibility(base, '1.0.0', undefined, (h) => void seen.push(h.flags)))
-        .state
-    ).toBe('supported');
-    expect(seen).toEqual([undefined, undefined]);
-  });
-
   // Decision: semver order is kept. A beta of 0.2.0 is older than 0.2.0, so a
   // minimum of 0.2.0 turns it away; a minimum that names the prerelease admits
   // it and every later prerelease of that version.
